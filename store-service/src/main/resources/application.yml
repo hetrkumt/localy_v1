@@ -1,0 +1,17 @@
+# application.yml 에 추가 또는 수정
+spring:
+  # ... 기존 설정 유지 (server, application, cloud 등)
+
+  r2dbc:
+    url: r2dbc:postgresql://localhost:5434/storedb # 데이터베이스 URL (your_database_name 부분을 실제 DB 이름으로 변경)
+    username: localyuser
+    password: localypassword
+    pool: # R2DBC 연결 풀 설정 (선택 사항이지만 권장)
+      max-size: 10 # 최대 연결 수
+      initial-size: 5 # 초기 연결 수
+      max-idle-time: 30m # 최대 유휴 시간
+
+  # Spring Data R2DBC Auditing 활성화 설정
+  data:
+    r2dbc:
+      entity-callbacks: enable # 엔티티 콜백 활성화 (Auditing 등에 사용)

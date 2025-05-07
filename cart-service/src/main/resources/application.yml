@@ -1,0 +1,28 @@
+server:
+  port: 8090 # Docker Compose에서 8090:8090으로 매핑됨
+
+spring:
+  application:
+    name: cart-service # 서비스 이름 지정 (선택 사항이지만 유용)
+
+  redis:
+    host: localhost
+    port: 6379 # Redis 기본 포트 (Compose에서 외부에 노출 안 했지만 내부 통신은 가능)
+
+logging:
+  level:
+    # Feign 클라이언트 인터페이스가 정의된 패키지 경로를 DEBUG 레벨로 설정
+    # 예: com.localy.cart_service.order.client 패키지에 OrderServiceClient 인터페이스가 있다면
+    com.localy.cart_service.orderIntegration.config.client: DEBUG
+    # 또는 특정 Feign 클라이언트 이름으로 설정 (application.yml의 @FeignClient name 속성 사용)
+    # feign.client.config.orderServiceClient: DEBUG # @FeignClient(name="orderServiceClient") 일 경우
+    # 또는 모든 Feign 클라이언트에 대해 설정 (로그가 매우 많아질 수 있음)
+    # feign: DEBUG
+  # Spring Cloud Stream이 클래스패스에 있다면 기본 Kafka 설정을 추가 (직접 사용 안 해도 필요할 수 있음)
+#  kafka:
+#    bootstrap-servers: localy-kafka:29092 # Docker Compose의 카프카 서비스 이름과 내부 통신용 포트
+# 장바구니 서비스가 주문 서비스로 HTTP 요청을 보낼 때 사용할 URL 설정
+# @Value("${order-service.url}") 등으로 주입받아 사용
+order:
+  service:
+    url: http://localhost:8091
