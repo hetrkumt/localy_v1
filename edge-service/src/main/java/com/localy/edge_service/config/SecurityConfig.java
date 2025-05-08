@@ -1,19 +1,14 @@
 package com.localy.edge_service.config;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.server.reactive.ServerHttpRequest;
-import org.springframework.security.config.Customizer; // 이 임포트 문을 추가해야 합니다.
+import org.springframework.http.HttpMethod; // HttpMethod 임포트
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
 import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
-import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.web.server.SecurityWebFilterChain;
-import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Mono;
 
 @Configuration
 public class SecurityConfig {
@@ -37,25 +32,43 @@ public class SecurityConfig {
 
     @Bean
     public SecurityWebFilterChain securityWebFilterChain(ServerHttpSecurity http) {
-        // ReactiveClientRegistrationRepository clientRegistrationRepository
-        // 이 파라미터는 이 securityWebFilterChain 빈 정의 자체에서는 사용되지 않으므로 제거했습니다.
-        // 다른 곳에서 필요하다면 해당 메서드 시그니처는 유지해야 합니다.
-
         return http
-                // === 변경: csrf().disable() 대신 람다 사용 ===
-                .csrf(csrf -> csrf.disable()) // CSRF 비활성화
-                // =======================================
+                // CSRF 비활성화 (RESTful API에서는 일반적으로 비활성화)
+                .csrf(csrf -> csrf.disable())
+                // 요청 경로별 접근 권한 설정
                 .authorizeExchange(exchange -> exchange
-                        .pathMatchers("/api/auth/**", "/api/token/**").permitAll() // auth/** 및 token/** 요청 허용
-                        .anyExchange().authenticated() // 나머지 요청 차단
+                        // 기존 허용 경로
+                        .pathMatchers("/api/auth/**", "/api/token/**").permitAll()
+
+                        // --- 가게 서비스 공개 GET 엔드포인트 ---
+                        // 모든 가게 조회
+                        .pathMatchers(HttpMethod.GET, "/api/stores").permitAll()
+                        // ID로 특정 가게 조회
+                        .pathMatchers(HttpMethod.GET, "/api/stores/{storeId}").permitAll()
+                        // 가게 이름으로 검색
+                        .pathMatchers(HttpMethod.GET, "/api/stores/search").permitAll()
+
+                        // --- 메뉴 서비스 공개 GET 엔드포인트 ---
+                        // ID로 특정 메뉴 조회
+                        .pathMatchers(HttpMethod.GET, "/api/menus/{menuId}").permitAll()
+                        // 특정 가게의 메뉴 목록 조회
+                        .pathMatchers(HttpMethod.GET, "/api/menus/stores/{storeId}/menus").permitAll()
+
+                        // --- 리뷰 서비스 공개 GET 엔드포인트 ---
+                        // ID로 특정 리뷰 조회
+                        .pathMatchers(HttpMethod.GET, "/api/reviews/{reviewId}").permitAll()
+                        // 특정 가게의 리뷰 목록 조회
+                        .pathMatchers(HttpMethod.GET, "/api/reviews/stores/{storeId}/reviews").permitAll()
+                        // 특정 사용자의 리뷰 목록 조회 (현재 컨트롤러 기준 공개)
+                        .pathMatchers(HttpMethod.GET, "/api/reviews/users/{userId}/reviews").permitAll()
+
+
+                        // 나머지 모든 요청 (주로 POST, PUT, DELETE 및 위에 명시되지 않은 GET)은 인증 필요
+                        .anyExchange().authenticated()
                 )
-                // === 변경: oauth2ResourceServer(...::jwt) 대신 람다 및 Customizer 사용 ===
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults())) // OAuth 2.0 Resource Server 활성화 및 JWT 기본 설정 사용
-                // =====================================================================
+                // OAuth 2.0 Resource Server 활성화 및 JWT 기본 설정 사용
+                // 엣지 서비스가 JWT 토큰을 받아 인증 처리함을 의미
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
                 .build();
     }
-
-    // 만약 OAuth2 Client 기능도 필요하다면 별도의 SecurityWebFilterChain 빈을 정의하거나
-    // 위 체인에 OAuth2 Client 설정을 추가해야 합니다.
-    // 현재 제공된 코드는 Resource Server 기능만 설정하고 있습니다.
 }

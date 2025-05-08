@@ -1,5 +1,4 @@
-package com.localy.app.review.controller; // 적절한 패키지 경로 사용
-
+package com.localy.store_service.review.controller;
 
 import com.localy.store_service.review.domain.Review;
 import com.localy.store_service.review.service.ReviewService;

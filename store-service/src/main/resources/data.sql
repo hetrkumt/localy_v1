@@ -1,0 +1,18 @@
+---- src/main/resources/data.sql
+--
+---- 초기 가게 데이터 삽입
+--INSERT INTO stores (owner_id, name, description, address, latitude, longitude, phone, opening_hours, status, category, created_at, updated_at)
+--VALUES ('user123', '첫번째 가게', '테스트용 가게입니다.', '서울시 강남구', 37.5172, 127.0582, '02-1111-2222', '평일 9-18', 'OPEN', 'CAFE', '2023-01-01 10:00:00', '2023-01-01 10:00:00');
+--
+---- 초기 메뉴 데이터 삽입 (위에서 생성한 가게 ID 사용)
+---- Note: data.sql 스크립트 실행 시에는 store_id 1번 가게가 실제로 존재하는지 보장하기 어렵습니다.
+---- 만약 이 스크립트만 실행한다면, 위 stores insert에서 생성된 실제 ID 값을 확인하여 아래 1 대신 사용해야 합니다.
+---- 또는 트랜잭션 내에서 stores insert 후 반환된 ID를 사용하여 menus insert를 수행하는 방식이 더 안전하지만,
+---- spring.sql.init은 각 구문을 별도 실행할 수 있습니다. 일단 '1'로 시도해봅니다.
+--INSERT INTO menus (store_id, name, description, price, image_url, is_available, created_at, updated_at)
+--VALUES (1, '아메리카노', '시원한 아메리카노', 4000.00, 'http://example.com/images/americano.jpg', TRUE, '2023-01-01 10:00:00', '2023-01-01 10:00:00');
+--
+---- 초기 리뷰 데이터 삽입
+---- Note: 마찬가지로 store_id 1번 가게와 user_id 'user456'이 실제로 존재하는지 보장하기 어렵습니다.
+--INSERT INTO reviews (store_id, user_id, rating, comment, created_at, updated_at)
+--VALUES (1, 'user456', 5, '가게가 정말 좋네요!', '2023-01-01 10:00:00', '2023-01-01 10:00:00');

@@ -1,17 +1,47 @@
+server:
+  port: 8001
+  netty:
+    connection-timeout: 2s
+    idle-timeout: 15s
+  shutdown: graceful
+
 # application.yml 에 추가 또는 수정
 spring:
-  # ... 기존 설정 유지 (server, application, cloud 등)
-
   r2dbc:
-    url: r2dbc:postgresql://localhost:5434/storedb # 데이터베이스 URL (your_database_name 부분을 실제 DB 이름으로 변경)
-    username: localyuser
-    password: localypassword
-    pool: # R2DBC 연결 풀 설정 (선택 사항이지만 권장)
-      max-size: 10 # 최대 연결 수
-      initial-size: 5 # 초기 연결 수
-      max-idle-time: 30m # 최대 유휴 시간
+    url: r2dbc:postgresql://localhost:5434/storedb # Docker Compose에 설정된 로컬 포트 5434 사용
+    username: localyuser # Docker Compose에 설정된 사용자 이름
+    password: localypassword # Docker Compose에 설정된 비밀번호
 
-  # Spring Data R2DBC Auditing 활성화 설정
-  data:
-    r2dbc:
-      entity-callbacks: enable # 엔티티 콜백 활성화 (Auditing 등에 사용)
+    # R2DBC 커넥션 풀 설정 (선택 사항, 권장)
+    pool:
+      max-size: 10
+      initial-size: 2
+      max-idle-time: 30m # 예: 30분 (PT30M 대신 YAML에서는 '30m' 또는 '30m')
+      validation-query: SELECT 1 # 연결 유효성 확인 쿼리
+      # 기타 풀 설정 옵션은 Spring Boot 문서 참고
+
+  sql:
+    init:
+      # DDL/DML 스크립트 실행 설정 (개발 단계에서 유용)
+      enabled: true # 스키마 및 데이터 스크립트 실행 활성화
+      platform: postgresql # 사용할 DB 플랫폼 지정
+      schema-locations: classpath:schema.sql # 스키마 스크립트 파일 경로 (src/main/resources/schema.sql)
+      data-locations: classpath:data.sql # 데이터 스크립트 파일 경로 (src/main/resources/data.sql)
+      continue-on-error: false # 스크립트 실행 중 오류 발생 시 중단 여부
+      mode: always
+
+# 로컬 이미지 파일 저장 경로 설정
+# 애플리케이션이 실행되는 서버의 파일 시스템 경로입니다.
+# 예: './uploads/images' 또는 '/opt/app/images' (Docker 사용 시 컨테이너 내부 경로)
+  # 웹에서 이미지에 접근할 URL 경로 설정
+  # 예: /images/ 라는 URL로 들어온 요청을 로컬 저장 경로와 연결
+#app:
+#  image:
+#    storage-location: ./opt/app/images
+#    url-path: /images/
+#
+# 로컬 이미지 파일 저장 관련 설정 (MenuService에서 사용)
+app:
+  image:
+    storage-location: ./uploads/images # 이미지를 저장할 로컬 파일 시스템 경로
+    url-path: /images/ # 웹에서 이미지에 접근할 URL 경로 접두사

@@ -53,7 +53,7 @@ services:
     image: "redis:7.2"
     container_name: "localy-edge-redis"
     ports:
-      - 63710:6379
+      - 6379:6379
     networks:
       - app-network
 
