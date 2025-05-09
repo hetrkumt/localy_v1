@@ -2,7 +2,8 @@
 
 # Stage 1: Build the application using a JDK image with build tools
 # 빌드 환경 설정 - JDK와 빌드 도구(Gradle 또는 Maven)가 포함된 이미지 사용
-FROM eclipse-temurin:17-jdk-alpine AS builder # JDK 17 Alpine Linux 이미지 사용 (가볍고 좋음)
+FROM eclipse-temurin:17-jdk-alpine AS builder
+# JDK 17 Alpine Linux 이미지 사용 (가볍고 좋음)
 
 # 애플리케이션 소스 코드가 위치할 작업 디렉토리 설정
 WORKDIR /app
@@ -25,7 +26,8 @@ RUN ./gradlew clean build -x test
 
 # Stage 2: Create the final runtime image using a smaller JRE image
 # 실행 환경 설정 - 애플리케이션 실행에 필요한 JRE만 포함된 더 가벼운 이미지 사용
-FROM eclipse-temurin:17-jre-alpine # JRE 17 Alpine Linux 이미지 사용
+FROM eclipse-temurin:17-jre-alpine
+# JRE 17 Alpine Linux 이미지 사용
 
 # 최종 이미지의 작업 디렉토리 설정
 WORKDIR /app

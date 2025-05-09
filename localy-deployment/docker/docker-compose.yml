@@ -30,23 +30,6 @@ services:
     networks:
       - app-network
 
-#  order-service:
-#    build:
-#      context: ../../order-service
-#    ports:
-#      - "9002:9002"
-#    depends_on:
-#      - order-postgre
-#    image: edge-service
-#    container_name: localy-edge-service
-#    networks:
-#      - app-network
-#    environment:
-#      - BASE_URL=http://edge-service-container:9000
-#      - SPRING_REDIS_HOST=localy-redis
-#      - USER_SERVICE_URL=http://localy-user-service:9001
-#      - SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI=http://keycloak-container:8080/realms/localy
-#      - SPRING_SECURITY_OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI=http://localy-keycloak:8080/realms/localy
 
   #데이터 베이스
   localy-edge-redis:
@@ -82,29 +65,6 @@ services:
       - KEYCLOAK_ADMIN_PASSWORD=password
     ports:
       - 8080:8080
-
-  #메시지 큐
-  localy-zookeeper:
-    image: confluentinc/cp-zookeeper:latest
-    container_name: zookeeper
-    ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
-  localy-kafka:
-    image: confluentinc/cp-kafka:latest
-    container_name: kafka
-    ports:
-      - "9092:9092"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-    depends_on:
-      - localy-zookeeper
 
 volumes:
   keycloak-data:
