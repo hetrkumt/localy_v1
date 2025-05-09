@@ -27,7 +27,7 @@ public class AuthService {
         formData.add("scope", "openid profile email");
 
         return webClient.post()
-                .uri("/realms/localy/protocol/openid-connect/token")
+                .uri("/token")
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .bodyValue(formData) // Form data 설정
                 .retrieve()
@@ -36,7 +36,7 @@ public class AuthService {
 
     public Mono<Void> logout(String accessToken) {
         return webClient.post()
-                .uri("/realms/localy/protocol/openid-connect/logout") // Keycloak 로그아웃 엔드포인트
+                .uri("/logout") // Keycloak 로그아웃 엔드포인트
                 .header("Authorization", "Bearer " + accessToken) // 액세스 토큰 전달
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .retrieve()

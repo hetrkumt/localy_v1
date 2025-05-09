@@ -1,14 +1,22 @@
+# 주문 서비스 application.yml
+
 server:
-  port: 8091 # Docker Compose에서 8092:8092로 매핑됨
+  port: 8091 # Docker Compose에서 8091:8091로 매핑됨
 
 spring:
   application:
     name: order-service # 서비스 이름 지정
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/orderdb # DB 서비스 이름, 기본 포트, DB 이름
-    username: orderuser # Docker Compose env에 설정한 사용자
-    password: orderpass # Docker Compose env에 설정한 비밀번호
+    # Docker 환경에서는 SPRING_DATASOURCE_URL 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 jdbc:postgresql://localhost:5432/orderdb 사용
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/orderdb}
+    # Docker 환경에서는 SPRING_DATASOURCE_USERNAME 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 orderuser 사용
+    username: ${SPRING_DATASOURCE_USERNAME:orderuser}
+    # Docker 환경에서는 SPRING_DATASOURCE_PASSWORD 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 orderpass 사용
+    password: ${SPRING_DATASOURCE_PASSWORD:orderpass}
     driver-class-name: org.postgresql.Driver
 
   jpa: # JPA 설정 예시
@@ -20,13 +28,16 @@ spring:
         format_sql: true
 
   kafka:
-    bootstrap-servers: localhost:9092 # Docker Compose의 카프카 서비스 이름과 내부 통신용 포트
+    # Docker 환경에서는 SPRING_KAFKA_BOOTSTRAP_SERVERS 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 localhost:9092 사용
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
 
   cloud:
     stream:
       kafka:
         binder:
-          brokers: ${spring.kafka.bootstrap-servers} # 카프카 바인더도 동일한 주소 사용
+          # Kafka 바인더 브로커 주소는 spring.kafka.bootstrap-servers 속성 값을 참조
+          brokers: ${spring.kafka.bootstrap-servers}
           # properties:
           #   configuration:
           #     # 컨슈머 및 프로듀서 공통 속성
@@ -48,6 +59,18 @@ spring:
               auto.offset.reset: earliest
               key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
               value.deserializer: org.springframework.kafka.support.serializer.JsonSerializer
-              spring.json.trusted.packages: com.localy.payment_service.payment.message.dto # OrderCreatedEvent 패키지 경로 추가
+              spring.json.trusted.packages: com.localy.payment_service.payment.message.dto # PaymentResultEvent 패키지 경로 추가
     function:
       definition: orderCreatedProducer;paymentResultConsumer
+
+# 다른 서비스 주소 설정 (예: 결제 서비스)
+# Docker 환경에서는 PAYMENT_SERVICE_URL 환경 변수 값 사용
+# 로컬 환경에서는 기본값 http://localhost:8092 사용
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8092}
+
+# 사용자 서비스 주소 (필요하다면 추가)
+# user:
+#   service:
+#     url: ${USER_SERVICE_URL:http://localhost:9001}

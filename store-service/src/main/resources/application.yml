@@ -8,15 +8,21 @@ server:
 # application.yml 에 추가 또는 수정
 spring:
   r2dbc:
-    url: r2dbc:postgresql://localhost:5434/storedb # Docker Compose에 설정된 로컬 포트 5434 사용
-    username: localyuser # Docker Compose에 설정된 사용자 이름
-    password: localypassword # Docker Compose에 설정된 비밀번호
+    # Docker 환경에서는 SPRING_R2DBC_URL 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 r2dbc:postgresql://localhost:5434/storedb 사용
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5434/storedb}
+    # Docker 환경에서는 SPRING_R2DBC_USERNAME 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 localyuser 사용
+    username: ${SPRING_R2DBC_USERNAME:localyuser}
+    # Docker 환경에서는 SPRING_R2DBC_PASSWORD 환경 변수 값 사용
+    # 로컬 환경에서는 기본값 localypassword 사용
+    password: ${SPRING_R2DBC_PASSWORD:localypassword}
 
     # R2DBC 커넥션 풀 설정 (선택 사항, 권장)
     pool:
       max-size: 10
       initial-size: 2
-      max-idle-time: 30m # 예: 30분 (PT30M 대신 YAML에서는 '30m' 또는 '30m')
+      max-idle-time: 30m # 예: 30분
       validation-query: SELECT 1 # 연결 유효성 확인 쿼리
       # 기타 풀 설정 옵션은 Spring Boot 문서 참고
 
@@ -30,18 +36,12 @@ spring:
       continue-on-error: false # 스크립트 실행 중 오류 발생 시 중단 여부
       mode: always
 
-# 로컬 이미지 파일 저장 경로 설정
-# 애플리케이션이 실행되는 서버의 파일 시스템 경로입니다.
-# 예: './uploads/images' 또는 '/opt/app/images' (Docker 사용 시 컨테이너 내부 경로)
-  # 웹에서 이미지에 접근할 URL 경로 설정
-  # 예: /images/ 라는 URL로 들어온 요청을 로컬 저장 경로와 연결
-#app:
-#  image:
-#    storage-location: ./opt/app/images
-#    url-path: /images/
-#
 # 로컬 이미지 파일 저장 관련 설정 (MenuService에서 사용)
 app:
   image:
-    storage-location: ./uploads/images # 이미지를 저장할 로컬 파일 시스템 경로
-    url-path: /images/ # 웹에서 이미지에 접근할 URL 경로 접두사
+    # Docker 환경에서는 APP_IMAGE_STORAGE_LOCATION 환경 변수 값 사용 (/opt/app/images)
+    # 로컬 환경에서는 기본값 ./uploads/images 사용
+    storage-location: ${APP_IMAGE_STORAGE_LOCATION:./uploads/images}
+    # Docker 환경에서는 APP_IMAGE_URL_PATH 환경 변수 값 사용 (/images/)
+    # 로컬 환경에서는 기본값 /images/ 사용
+    url-path: ${APP_IMAGE_URL_PATH:/images/}

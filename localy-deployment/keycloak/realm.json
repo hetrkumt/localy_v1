@@ -1,172 +1,95 @@
 {
-
   "realm": "localy",
-
   "enabled": true,
-
   "users": [
-
     {
-
       "username": "consumer1",
-
       "enabled": true,
-
       "emailVerified": true,
-
       "credentials": [
-
         {
-
           "type": "password",
-
           "value": "consumerpassword",
-
           "temporary": false
-
         }
-
       ],
-
       "email": "consumer1@localy.com",
-
       "realmRoles": ["consumer"]
-
     },
-
     {
-
       "username": "market_owner1",
-
       "enabled": true,
-
       "emailVerified": true,
-
       "credentials": [
-
         {
-
           "type": "password",
-
           "value": "marketownerpassword",
-
           "temporary": false
-
         }
-
       ],
-
       "email": "market_owner1@localy.com",
-
       "realmRoles": ["market_owner"]
-
     },
-
     {
-
       "username": "admin1",
-
       "enabled": true,
-
       "emailVerified": true,
-
       "credentials": [
-
         {
-
           "type": "password",
-
           "value": "adminpassword",
-
           "temporary": false
-
         }
-
       ],
-
       "email": "admin1@localy.com",
-
       "realmRoles": ["admin"]
-
     }
-
   ],
-
   "roles": {
-
     "realm": [
-
       {
-
         "name": "consumer",
-
         "description": "Role for standard consumers to access services."
-
       },
-
       {
-
         "name": "market_owner",
-
         "description": "Role for market owners who manage their stores in the marketplace."
-
       },
-
       {
-
         "name": "admin",
-
         "description": "Administrator role for system management and oversight."
-
       }
-
     ]
-
   },
-
   "clients": [
-
     {
-
       "clientId": "edge-service",
-
       "enabled": true,
-
       "redirectUris": [
-
         "http://localhost:9000/login/oauth2/code/*",
-
         "http://localhost:9000/*"
-
       ],
-
       "clientAuthenticatorType": "client-secret",
-
-      "secret": "edge-secret"
-
+      "secret": "edge-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect"
     },
-
     {
-
       "clientId": "user-service",
-
       "enabled": true,
-
       "redirectUris": [
-
         "http://localhost:9001/*"
-
       ],
-
       "clientAuthenticatorType": "client-secret",
-
-      "secret": "user-secret"
+      "secret": "user-secret",
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect"
 
     }
 
   ]
 
 }
-
-
-
