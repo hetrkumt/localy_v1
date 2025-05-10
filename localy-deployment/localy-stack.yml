@@ -81,17 +81,19 @@ services:
 
   # 엣지 서비스용 Redis (세션 저장 등)
   localy-edge-redis:
-    image: "redis:7.2" # 특정 버전 Redis 이미지 사용
+    image: redis:latest
     hostname: localy-edge-redis
-    # ports: # 엣지 서비스 내부에서만 접근하므로 호스트 포트 매핑 불필요
-    #   - "6379:6379" # <-- 이 라인은 제거하거나 주석 처리합니다.
+    ports:
+      - "6380:6379" # 호스트 6380 포트를 컨테이너 내부 6379 포트에 매핑
+    # Redis 데이터 지속성을 위한 볼륨 설정 (선택 사항, 필요시 주석 해제)
+    # volumes:
+    #   - redis_data:/data
     deploy:
       replicas: 1
       restart_policy:
-        condition: on-failure
+        condition: on-failure # 명시적으로 중지되지 않는 한 항상 재시작
     networks:
       - app-network
-
   # --- 메시징 시스템 (Kafka & Zookeeper) ---
 
   # Zookeeper (Kafka 의존성)
@@ -206,8 +208,8 @@ services:
       KEYCLOAK_ISSUER_URI: http://localy-keycloak:8080/realms/localy
       KEYCLOAK_BASE_URL: http://localy-keycloak:8080/realms/localy
       # Redis 주소
-      SPRING_REDIS_HOST: localy-edge-redis # 엣지 서비스용 Redis 서비스 이름 사용
-      SPRING_REDIS_PORT: 6379 # Redis 기본 포트
+      SPRING_DATA_REDIS_HOST: localy-edge-redis # 엣지 서비스용 Redis 서비스 이름 사용
+      SPRING_DATA_REDIS_PORT: 6379
       # BASE_URL 설정 (엣지 서비스가 외부에서 접근 가능한 주소)
       # Docker Swarm 환경에서는 공인 IP 또는 로드 밸런서 주소로 설정해야 할 수 있습니다.
       # 로컬 테스트 시에는 'http://localhost:9000' 또는 컨테이너 이름 'http://edge-service:9000' 사용

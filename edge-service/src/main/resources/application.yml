@@ -12,19 +12,21 @@ spring:
     name: edge-service
   lifecycle:
     timeout-per-shutdown-phase: 15s
-  config:
-    import: "optional:configserver:"
+  # Config Server 관련 설정을 제거합니다.
+  # import: "optional:configserver:"
   cloud:
+    # Config Server 클라이언트 자동 구성을 비활성화합니다.
     config:
-      uri: http://localhost:8888
-      request-connect-timeout: 5000 # 5s
-      request-read-timeout: 5000 # 5s
-      fail-fast: false # In production, set to true
-      retry:
-        max-attempts: 6
-        initial-interval: 1000 # 1s
-        max-interval: 2000 # 2s
-        multiplier: 1.1
+      enabled: false # <-- 이 라인을 추가합니다.
+      # uri: http://localhost:8888 # 이 설정들은 더 이상 사용되지 않습니다.
+      # request-connect-timeout: 5000 # 5s
+      # request-read-timeout: 5000 # 5s
+      # fail-fast: false # In production, set to true
+      # retry:
+      #   max-attempts: 6
+      #   initial-interval: 1000 # 1s
+      #   max-interval: 2000 # 2s
+      #   multiplier: 1.1
     gateway:
       httpclient:
         connect-timeout: 5000 # 2s
@@ -68,7 +70,7 @@ spring:
                 fallbackUri: forward:/user-fallback # 서킷 오픈 또는 예외 발생 시 포워딩될 경로
             - RemoveRequestHeader=Cookie # 쿠키 헤더 제거 필터
             # default-filters에 TokenRelay가 있으므로 여기서 중복 제거
-            # - TokenRelay
+            # - TokenRelay # 이 라우트에도 토큰 릴레이 필터 적용 (기본 필터 외 개별 설정)
 
         # Cart Service Route
         - id: cart-service-route # 라우트 고유 ID
@@ -113,6 +115,7 @@ spring:
           filters:
           # default-filters에 TokenRelay가 있으므로 여기서 중복 제거
           # - TokenRelay
+
         # -----------------------------------------------------
 
   security:
@@ -130,16 +133,18 @@ spring:
               - email
         provider:
           keycloak:
+            # 표준 Spring Boot 환경 변수명 (SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI) 사용
             issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
       resourceserver:
         jwt:
+          # 표준 Spring Boot 환경 변수명 (SPRING_SECURITY_OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI) 사용
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
 
-  redis:
-    connect-timeout: 5s
-    host: ${SPRING_REDIS_HOST:localhost}
-    port: 6379
-    timeout: 1s
+  data: # <-- data 추가
+    redis: # <-- redis 추가
+      connect-timeout: 5s
+      host: ${SPRING_DATA_REDIS_HOST:localhost} # 변경된 환경 변수 이름 사용
+      port: ${SPRING_DATA_REDIS_PORT:6379}     # 변경된 환경 변수 이름 사용
 
   session:
     store-type: redis
@@ -160,9 +165,6 @@ resilience4j:
       default:
         timeoutDuration: 5s
 
-#logging:
-#  level:
-#    io.github.resilience4j: DEBUG
 logging:
   level:
     # Spring Security 전반 로깅 레벨 조정
@@ -171,6 +173,11 @@ logging:
     org.springframework.security.oauth2: DEBUG
 
     io.github.resilience4j: DEBUG
+    # Redis 연결 관련 로깅 레벨 추가 (필요시)
+    org.springframework.data.redis: DEBUG
+    io.lettuce.core: DEBUG
 
+# WebClientConfig에서 사용할 Keycloak 기본 URL 환경 변수 설정
+# 이 환경 변수도 기본값으로 localhost를 사용합니다.
 keycloak:
   base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080/realms/localy}

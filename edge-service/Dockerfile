@@ -39,7 +39,7 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 # 애플리케이션이 리스닝할 포트 노출 (실제 네트워크 설정에 필수적이지는 않으나 문서화 목적)
 # 이 포트 번호는 각 서비스의 application.yml 파일에 설정된 server.port와 일치해야 합니다!
-EXPOSE 8001
+EXPOSE 9000
 
 # 컨테이너 시작 시 실행될 명령어 설정
 # 복사한 app.jar 파일을 java -jar 명령어로 실행합니다.
