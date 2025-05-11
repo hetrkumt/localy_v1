@@ -145,8 +145,8 @@ spring:
           # 표준 Spring Boot 환경 변수명 (SPRING_SECURITY_OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI) 사용
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
 
-  data: # <-- data 추가
-    redis: # <-- redis 추가
+  data: 
+    redis: 
       connect-timeout: 5s
       host: ${SPRING_DATA_REDIS_HOST:localhost} # 변경된 환경 변수 이름 사용
       port: ${SPRING_DATA_REDIS_PORT:6379}     # 변경된 환경 변수 이름 사용
