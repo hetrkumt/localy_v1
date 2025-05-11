@@ -47,6 +47,8 @@ public class SecurityConfig {
                         .pathMatchers(HttpMethod.GET, "/api/stores/{storeId}").permitAll()
                         // 가게 이름으로 검색
                         .pathMatchers(HttpMethod.GET, "/api/stores/search").permitAll()
+                        // 이미지 경로를 인증 없이 접근 허용 - 로그에서 확인된 문제 해결
+                        .pathMatchers(HttpMethod.GET, "/images/**").permitAll()
 
                         // --- 메뉴 서비스 공개 GET 엔드포인트 ---
                         // ID로 특정 메뉴 조회
