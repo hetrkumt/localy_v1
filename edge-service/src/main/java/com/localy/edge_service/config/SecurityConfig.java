@@ -40,6 +40,9 @@ public class SecurityConfig {
                         // 기존 허용 경로
                         .pathMatchers("/api/auth/**", "/api/token/**").permitAll()
 
+                        // 회원가입 엔드포인트 허용 - 인증 없이 접근 가능하도록 설정
+                        .pathMatchers(HttpMethod.POST, "/api/users").permitAll() // <-- 이 라인을 추가합니다.
+
                         // --- 가게 서비스 공개 GET 엔드포인트 ---
                         // 모든 가게 조회
                         .pathMatchers(HttpMethod.GET, "/api/stores").permitAll()

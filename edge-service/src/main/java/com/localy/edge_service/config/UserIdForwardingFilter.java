@@ -12,33 +12,14 @@ import org.springframework.stereotype.Component; // Component 임포트
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-
-/**
- * Spring Cloud Gateway의 Global Filter로 동작하며,
- * 인증된 사용자의 JWT 토큰에서 사용자 ID (subject)를 추출하여
- * 다운스트림 서비스로 전달되는 요청 헤더에 X-User-Id로 추가하는 필터입니다.
- * 인증되지 않은 요청에 대해서는 헤더를 추가하지 않고 요청을 그대로 통과시킵니다.
- */
 @Component // Spring 빈으로 등록
 public class UserIdForwardingFilter implements GlobalFilter, Ordered {
 
-    /**
-     * 빈 생성 및 초기화 후 호출되는 메서드.
-     * 필터가 정상적으로 로드되었는지 확인하기 위한 로그를 출력합니다.
-     */
     @PostConstruct
     public void init() {
         System.out.println("--- UserIdForwardingFilter: Bean Created and Initialized Successfully! ---");
     }
 
-    /**
-     * 필터 체인에서 이 필터의 실행 순서를 정의합니다.
-     * 낮은 값일수록 먼저 실행됩니다.
-     * Spring Security 필터들 (예: TokenRelay) 이후에 실행되어야 SecurityContext에 인증 정보가 채워집니다.
-     * 하지만 Gateway의 라우팅 관련 필터들보다는 먼저 실행되어야 헤더가 추가된 요청이 라우팅됩니다.
-     * 일반적으로 0 또는 양수 값을 사용하여 Security 필터들 뒤에 위치시킵니다.
-     * 다른 필터와의 순서 충돌 시 조정이 필요할 수 있습니다.
-     */
     @Override
     public int getOrder() {
         // Ordered.HIGHEST_PRECEDENCE는 Integer.MIN_VALUE (가장 먼저)
@@ -47,14 +28,7 @@ public class UserIdForwardingFilter implements GlobalFilter, Ordered {
         return 0;
     }
 
-    /**
-     * 필터의 핵심 로직을 구현합니다.
-     * 요청을 가로채고, SecurityContext에서 사용자 ID를 추출하여 헤더에 추가한 후 다음 필터로 전달합니다.
-     *
-     * @param exchange 요청 및 응답 정보를 담는 ServerWebExchange 객체
-     * @param chain 다음 필터 체인
-     * @return 다음 필터 체인의 처리 결과 (Mono<Void>)
-     */
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         System.out.println("--- UserIdForwardingFilter: 필터 시작 ---");

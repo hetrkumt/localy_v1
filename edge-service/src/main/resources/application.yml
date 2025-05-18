@@ -138,11 +138,9 @@ spring:
               - email
         provider:
           keycloak:
-            # 표준 Spring Boot 환경 변수명 (SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI) 사용
             issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
       resourceserver:
         jwt:
-          # 표준 Spring Boot 환경 변수명 (SPRING_SECURITY_OAUTH2_RESOURCE_SERVER_JWT_ISSUER_URI) 사용
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
 
   data: 

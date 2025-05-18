@@ -5,7 +5,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class FeignLoggingConfig { // 클래스 이름은 자유롭게
+public class FeignLoggingConfig {
 
     @Bean
     Logger.Level feignLoggerLevel() {

@@ -18,7 +18,7 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-@Builder // <-- @Builder 어노테이션 추가
+@Builder
 public class Store {
 
     @Id

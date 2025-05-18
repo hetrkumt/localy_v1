@@ -80,17 +80,8 @@ public class MenuController {
         System.out.println("--- MenuController: POST /api/menus 요청 수신 (Multipart with Image) ---");
 
         // 1. X-User-Id 헤더에서 사용자 ID 가져오기 및 유효성 검증
-        return getUserIdFromHeaders(exchange) // Mono<String> (userId) 반환 또는 오류 발생
+        return getUserIdFromHeaders(exchange)
                 .flatMap(userId -> {
-                    // 2. 필요한 입력 데이터 (menu JSON, optional image FilePart)를 Reactive 체인으로 결합
-                    // imageFileMono가 null인 경우 Mono.empty()로 대체하는 방어 로직 포함 (redundant with zip handling null)
-                    // Mono<FilePart> safeImageFileMono = (imageFileMono != null ? imageFileMono : Mono.empty());
-
-                    // Zip the menuJson Mono with the imageFileMono.
-                    // If imageFileMono emits null (because required=false and the part is missing),
-                    // Mono.zip will emit a Tuple2 where the second element is null.
-                    // If imageFileMono is Mono.empty() (less likely for @RequestPart(required=false)),
-                    // Mono.zip will complete empty.
                     return Mono.zip(menuJson, imageFileMono) // <-- Modified: Zipping directly
                             .flatMap(tuple -> { // This flatMap lambda is lambda$createMenu$4 (line 102 in your stack trace)
                                 // 3. 튜플에서 데이터 추출 및 서비스 메서드 호출
@@ -102,14 +93,6 @@ public class MenuController {
                                 // 서비스 호출: 메뉴 객체, FilePart (null 가능), 사용자 ID 전달
                                 return menuService.createMenu(menu, imageFile, userId); // 서비스는 Mono<Menu> 반환 (권한 확인, 저장 포함)
                             })
-                            // Add a switchIfEmpty here to handle the case where Mono.zip completes empty
-                            // This happens if menuJson or imageFileMono completes empty.
-                            // For @RequestPart, menuJson should not be empty if the part is present.
-                            // imageFileMono might be empty if the part is present but has no content,
-                            // or if @RequestPart(required=false) behaves unexpectedly as empty instead of null.
-                            // Let's assume Mono.zip emitting null is the primary path for missing optional parts.
-                            // If Mono.zip completes empty, it likely means a required part was missing or empty.
-                            // We can return a Bad Request in that case.
                             .switchIfEmpty(Mono.error(new IllegalArgumentException("Missing required parts or empty request body."))); // Added switchIfEmpty for safety
 
 

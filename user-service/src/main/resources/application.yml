@@ -35,8 +35,9 @@ spring:
           # 환경 변수 사용, 기본값으로 localhost 설정
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
 
-# WebClientConfig에서 사용할 Keycloak 기본 URL 환경 변수 설정
-# 이 환경 변수도 기본값으로 localhost를 사용합니다.
 keycloak:
-  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080/realms/localy}
-    
+  base-url: ${KEYCLOAK_BASE_URL:http://localhost:8080} # Keycloak 서버의 기본 URL (컨테이너 이름 또는 localhost)
+  realm: localy # 사용할 Realm 이름
+  user-service: # user-service 클라이언트 정보
+    client-id: user-service
+    client-secret: user-secret

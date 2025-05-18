@@ -7,7 +7,7 @@
 //
 //import java.time.Duration; // 타임아웃 설정을 위해 임포트
 //
-//@Configuration // 이 클래스가 스프링 설정 정보를 담고 있음을 나타냅니다.
+//@Configuration
 //public class RestTemplateConfig {
 //
 //    @Bean // 이 메서드가 반환하는 객체를 스프링 Bean으로 등록합니다. Bean 이름은 메서드 이름과 같습니다 (여기서는 'restTemplate').

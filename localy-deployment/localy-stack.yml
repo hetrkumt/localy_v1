@@ -1,4 +1,4 @@
-# Docker Compose 파일 형식 버전 지정 (Swarm 배포 시 v3.8 이상 권장)
+
 version: '3.8'
 
 # 서비스 정의
@@ -174,12 +174,6 @@ services:
     environment:
       KEYCLOAK_ADMIN: user # 관리자 사용자 이름
       KEYCLOAK_ADMIN_PASSWORD: password # 관리자 비밀번호
-      # DB 설정 (PostgreSQL 사용 시) - 필요하다면 주석 해제하고 설정
-      # KC_DB: postgres
-      # KC_DB_URL: jdbc:postgresql://<DB 서비스 이름>:<DB 포트>/<DB 이름>
-      # KC_DB_USERNAME: <DB 사용자>
-      # KC_DB_PASSWORD: <DB 비밀번호>
-      # KC_HOSTNAME_STRICT: false # 개발 환경에서 hostname 검증 비활성화 (선택 사항)
     ports:
       - 8080:8080 # 호스트 8080 포트를 컨테이너 내부 8080 포트에 매핑
     deploy:
@@ -241,16 +235,7 @@ services:
     environment:
       # Keycloak 주소 (환경 변수로 주입 - Docker Swarm 환경에서 사용)
       KEYCLOAK_ISSUER_URI: http://localy-keycloak:8080/realms/localy
-      KEYCLOAK_BASE_URL: http://localy-keycloak:8080/realms/localy
-    # 사용자 서비스 환경 변수 (예: DB 연결 정보 - 사용자 서비스가 DB를 사용한다면 추가)
-    # SPRING_R2DBC_URL: r2dbc:postgresql://<사용자 DB 서비스 이름>:5432/<사용자 DB 이름> # 예시
-    # SPRING_R2DBC_USERNAME: <사용자 DB 사용자> # 예시
-    # SPRING_R2DBC_PASSWORD: <사용자 DB 비밀번호> # 예시
-    # Kafka 설정 (사용자 서비스가 Kafka를 사용한다면 추가)
-    # SPRING_KAFKA_BOOTSTRAP_SERVERS: localy-kafka:29092 # 예시
-    # depends_on: # 사용자 서비스가 DB 또는 Kafka를 사용한다면 의존성 추가
-    #   - <사용자 DB 서비스 이름> # 예시
-    #   - localy-kafka # 예시
+      KEYCLOAK_BASE_URL: http://localy-keycloak:8080/
     deploy:
       replicas: 1
       restart_policy:
@@ -273,15 +258,12 @@ services:
       APP_IMAGE_STORAGE_LOCATION: /opt/app/images # Dockerfile의 WORKDIR + 경로에 맞게 수정
       # 이미지 접근 URL 경로 (엣지 서비스에서 접근할 경로)
       APP_IMAGE_URL_PATH: /images/
-      # Kafka 설정 (스토어 서비스가 Kafka를 사용한다면 추가)
-      # SPRING_KAFKA_BOOTSTRAP_SERVERS: localy-kafka:29092 # 예시
     volumes:
       # 이미지 저장을 위한 볼륨 설정
       # 'store_images'라는 이름의 볼륨을 컨테이너의 이미지 저장 디렉토리에 마운트
       - store_images:/opt/app/images # Dockerfile의 WORKDIR + 경로에 맞게 수정
     depends_on:
       - localy-store-postgre # 스토어 서비스는 스토어 DB가 먼저 시작된 후에 시작
-      # - localy-kafka # 스토어 서비스가 Kafka를 사용한다면 의존성 추가
     deploy:
       replicas: 1
       restart_policy:
@@ -375,8 +357,6 @@ volumes:
   payment_data: # 결제 서비스용 DB 데이터
   keycloak_data: # Keycloak 데이터
   store_images: # 스토어 서비스 이미지 파일 저장
-  # 장바구니 Redis 데이터 지속성 볼륨 (필요시 주석 해제)
-  # cart_redis_data:
 
 # 네트워크 정의 (서비스 간 통신을 위한 오버레이 네트워크)
 networks:
