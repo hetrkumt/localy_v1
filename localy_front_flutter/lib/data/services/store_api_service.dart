@@ -1,11 +1,11 @@
 // 파일 위치: lib/data/services/store_api_service.dart
 import 'dart:convert'; // jsonEncode 사용
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http; // http.MultipartFile 사용
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart'; // XFile 사용을 위해 추가
 
-import '../models/store_models.dart'; // 가게, 메뉴, 리뷰 모델 import
-import 'api_client.dart';           // 공통 API 클라이언트 import
+import '../models/store_models.dart';
+import 'api_client.dart';
 
 class StoreApiService {
   final ApiClient _apiClient;
@@ -16,10 +16,15 @@ class StoreApiService {
   Future<List<Store>> getAllStores() async {
     try {
       final response = await _apiClient.get('/stores', requiresAuth: false);
-      final List<dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return responseData.map((json) => Store.fromJson(json)).toList();
     } catch (e) {
       debugPrint("StoreApiService: 모든 가게 조회 실패 - $e");
+      // 오류 메시지를 좀 더 구체적으로 전달
+      if (e.toString().contains("subtype of type 'List<dynamic>'")) {
+        throw Exception("가게 목록 응답 형식이 잘못되었습니다. 서버 응답을 확인해주세요.");
+      }
       throw Exception("가게 목록을 불러오는데 실패했습니다.");
     }
   }
@@ -27,7 +32,8 @@ class StoreApiService {
   Future<Store> getStoreById(int storeId) async {
     try {
       final response = await _apiClient.get('/stores/$storeId', requiresAuth: false);
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Store.fromJson(responseData);
     } catch (e) {
       debugPrint("StoreApiService: ID로 가게 조회 실패 (ID: $storeId) - $e");
@@ -38,7 +44,8 @@ class StoreApiService {
   Future<List<Store>> searchStoresByName(String name) async {
     try {
       final response = await _apiClient.get('/stores/search?name=${Uri.encodeComponent(name)}', requiresAuth: false);
-      final List<dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return responseData.map((json) => Store.fromJson(json)).toList();
     } catch (e) {
       debugPrint("StoreApiService: 이름으로 가게 검색 실패 (Name: $name) - $e");
@@ -49,6 +56,7 @@ class StoreApiService {
   Future<Store> createStore(Store storeData) async {
     try {
       final response = await _apiClient.post('/stores', storeData.toJson());
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Store.fromJson(responseData);
     } catch (e) {
@@ -60,6 +68,7 @@ class StoreApiService {
   Future<Store> updateStore(int storeId, Store storeData) async {
     try {
       final response = await _apiClient.put('/stores/$storeId', storeData.toJson());
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Store.fromJson(responseData);
     } catch (e) {
@@ -71,7 +80,7 @@ class StoreApiService {
   Future<void> deleteStore(int storeId) async {
     try {
       final response = await _apiClient.delete('/stores/$storeId');
-      _apiClient.processResponse(response);
+      _apiClient.processResponse(response); // 본문 없는 성공 응답 기대
     } catch (e) {
       debugPrint("StoreApiService: 가게 삭제 실패 (ID: $storeId) - $e");
       throw Exception("가게 삭제에 실패했습니다.");
@@ -82,6 +91,7 @@ class StoreApiService {
   Future<Menu> getMenuById(int menuId) async {
     try {
       final response = await _apiClient.get('/menus/$menuId', requiresAuth: false);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Menu.fromJson(responseData);
     } catch (e) {
@@ -93,7 +103,8 @@ class StoreApiService {
   Future<List<Menu>> getMenusByStoreId(int storeId) async {
     try {
       final response = await _apiClient.get('/menus/stores/$storeId/menus', requiresAuth: false);
-      final List<dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return responseData.map((json) => Menu.fromJson(json)).toList();
     } catch (e) {
       debugPrint("StoreApiService: 특정 가게 메뉴 조회 실패 (StoreID: $storeId) - $e");
@@ -109,14 +120,14 @@ class StoreApiService {
       final List<http.MultipartFile> files = [];
       if (imageXFile != null) {
         files.add(await http.MultipartFile.fromPath(
-          'image', // 백엔드 @RequestPart 이름과 일치
+          'image',
           imageXFile.path,
           filename: imageXFile.name,
         ));
       }
-
       final streamedResponse = await _apiClient.multipartRequest('POST', '/menus', fields, files);
       final response = await http.Response.fromStream(streamedResponse);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Menu.fromJson(responseData);
     } catch (e) {
@@ -138,9 +149,9 @@ class StoreApiService {
           filename: imageXFile.name,
         ));
       }
-
       final streamedResponse = await _apiClient.multipartRequest('PUT', '/menus/$menuId', fields, files);
       final response = await http.Response.fromStream(streamedResponse);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Menu.fromJson(responseData);
     } catch (e) {
@@ -163,6 +174,7 @@ class StoreApiService {
   Future<Review> getReviewById(int reviewId) async {
     try {
       final response = await _apiClient.get('/reviews/$reviewId', requiresAuth: false);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Review.fromJson(responseData);
     } catch (e) {
@@ -174,7 +186,8 @@ class StoreApiService {
   Future<List<Review>> getReviewsByStoreId(int storeId) async {
     try {
       final response = await _apiClient.get('/reviews/stores/$storeId/reviews', requiresAuth: false);
-      final List<dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return responseData.map((json) => Review.fromJson(json)).toList();
     } catch (e) {
       debugPrint("StoreApiService: 특정 가게 리뷰 조회 실패 (StoreID: $storeId) - $e");
@@ -185,7 +198,8 @@ class StoreApiService {
   Future<List<Review>> getReviewsByUserId(String userId) async {
     try {
       final response = await _apiClient.get('/reviews/users/$userId/reviews', requiresAuth: false);
-      final List<dynamic> responseData = _apiClient.processResponse(response);
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
+      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return responseData.map((json) => Review.fromJson(json)).toList();
     } catch (e) {
       debugPrint("StoreApiService: 특정 사용자 리뷰 조회 실패 (UserID: $userId) - $e");
@@ -196,6 +210,7 @@ class StoreApiService {
   Future<Review> submitReview(Review reviewData) async {
     try {
       final response = await _apiClient.post('/reviews', reviewData.toJson());
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Review.fromJson(responseData);
     } catch (e) {
@@ -207,6 +222,7 @@ class StoreApiService {
   Future<Review> updateReview(int reviewId, Review reviewData) async {
     try {
       final response = await _apiClient.put('/reviews/$reviewId', reviewData.toJson());
+      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
       final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
       return Review.fromJson(responseData);
     } catch (e) {

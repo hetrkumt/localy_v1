@@ -1,5 +1,3 @@
--- src/main/resources/schema.sql
-
 -- 기존 테이블이 존재할 경우 삭제 (개발 환경에서 편리, 프로덕션에서는 신중)
 DROP TABLE IF EXISTS reviews;
 DROP TABLE IF EXISTS menus;
@@ -18,6 +16,8 @@ CREATE TABLE stores (
     opening_hours VARCHAR(255), -- 영업 시간 정보
     status VARCHAR(50), -- 가게 상태 (ENUM 대신 문자열로 저장)
     category VARCHAR(50), -- 가게 카테고리 (ENUM 대신 문자열로 저장)
+    main_image_url VARCHAR(255), -- 가게 대표 이미지 URL (선택 사항)
+    gallery_image_urls_json TEXT, -- 가게 갤러리 이미지 URL 목록 (JSON 문자열, 선택 사항)
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, -- 생성 시간 (타임존 정보 없음)
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL -- 수정 시간 (타임존 정보 없음)
 );
@@ -49,6 +49,7 @@ CREATE TABLE reviews (
     user_id VARCHAR(255) NOT NULL, -- 리뷰 작성자 사용자 ID (문자열)
     rating INT NOT NULL, -- 평점 (정수)
     comment TEXT, -- 리뷰 내용
+    image_url VARCHAR(255), -- 리뷰 이미지 URL (선택 사항)
     created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, -- 생성 시간
     updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL, -- 수정 시간
 
@@ -57,7 +58,7 @@ CREATE TABLE reviews (
     CONSTRAINT fk_store_review
         FOREIGN KEY (store_id)
         REFERENCES stores (id)
-        ON DELETE CASCADE -- <--- 여기 쉼표를 제거했습니다!
+        ON DELETE CASCADE
 );
 
 -- R2DBC Auditing을 위한 트리거 또는 함수 설정 (선택 사항, DB 레벨에서 자동 시간 기록 시)

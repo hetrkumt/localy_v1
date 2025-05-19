@@ -13,7 +13,7 @@ void main() async {
 
   // 네이버 지도 SDK 초기화
   // 앱 실행 시 한 번만 수행하면 됩니다.
-  await NaverMapSdk.instance.initialize(
+  await FlutterNaverMap().init(
     clientId: AppConfig.naverMapClientId, // AppConfig에서 클라이언트 ID 사용
     onAuthFailed: (ex) {
       // 인증 실패 시 콘솔에 에러를 출력합니다.

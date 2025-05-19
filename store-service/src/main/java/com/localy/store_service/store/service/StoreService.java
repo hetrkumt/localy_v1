@@ -1,155 +1,340 @@
-package com.localy.store_service.store.service; // 적절한 서비스 패키지 사용
+package com.localy.store_service.store.service;
 
-// 필요한 임포트
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.localy.store_service.menu.service.MenuService; // MenuService 임포트
+import com.localy.store_service.review.service.ReviewService;
 import com.localy.store_service.store.domain.Store;
+import com.localy.store_service.store.domain.StoreCategory; // StoreCategory 임포트 (가정)
 import com.localy.store_service.store.repository.StoreRepository;
-import lombok.RequiredArgsConstructor; // Lombok RequiredArgsConstructor 임포트
-import org.springframework.stereotype.Service; // Service 어노테이션 임포트
-
+import io.micrometer.common.lang.Nullable;
+import jakarta.annotation.PostConstruct;
+// lombok.RequiredArgsConstructor; // 생성자 직접 작성
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.codec.multipart.FilePart;
+import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
-import java.util.NoSuchElementException; // 예외 임포트
-import java.lang.SecurityException; // SecurityException 임포트
-import java.lang.IllegalArgumentException; // IllegalArgumentException 임포트
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.UUID;
 
-
-@Service // Spring 서비스 빈으로 등록
-@RequiredArgsConstructor // final 필드에 대한 생성자 주입 (storeRepository)
+@Service
+// @RequiredArgsConstructor
 public class StoreService {
 
     private final StoreRepository storeRepository;
+    private final ObjectMapper objectMapper;
+    private final ReviewService reviewService;
+    private final MenuService menuService; // MenuService 의존성 추가
 
-    // 모든 가게 목록 조회 (권한 확인 필요 없음)
-    public Flux<Store> findAllStores() {
-        System.out.println("--- StoreService: findAllStores 호출 (R2DBC) ---");
-        return storeRepository.findAll() // R2dbcRepository의 findAll()은 Flux<Store>를 반환
-                .doOnComplete(() -> System.out.println("--- StoreService: findAllStores 완료 ---"));
+    @Value("${app.image.storage-location:./uploads/store_images}")
+    private String storageLocation;
+
+    @Value("${app.image.url-path:/store-images/}")
+    private String imageUrlPath;
+
+    public StoreService(StoreRepository storeRepository, ObjectMapper objectMapper, ReviewService reviewService, MenuService menuService) {
+        this.storeRepository = storeRepository;
+        this.objectMapper = objectMapper;
+        this.reviewService = reviewService;
+        this.menuService = menuService; // MenuService 주입
     }
 
-    // ID로 특정 가게 조회 (권한 확인 필요 없음)
+    @PostConstruct
+    public void initStorageDirectory() {
+        Path path = Paths.get(storageLocation);
+        if (!Files.exists(path)) {
+            try {
+                Files.createDirectories(path);
+                System.out.println("--- Store Image Storage: Created directory: " + storageLocation + " ---");
+            } catch (IOException e) {
+                System.err.println("--- Store Image Storage: Failed to create directory: " + storageLocation + " - " + e.getMessage() + " ---");
+            }
+        }
+    }
+
+    private Mono<String> uploadImageToStorage(@Nullable FilePart imageFile) {
+        if (imageFile == null || imageFile.filename().isEmpty()) {
+            return Mono.empty();
+        }
+        String originalFilename = imageFile.filename();
+        String fileExtension = "";
+        int dotIndex = originalFilename.lastIndexOf('.');
+        if (dotIndex > 0 && dotIndex < originalFilename.length() - 1) {
+            fileExtension = originalFilename.substring(dotIndex);
+        }
+        String uniqueFilename = UUID.randomUUID().toString() + fileExtension;
+        Path filePath = Paths.get(storageLocation).resolve(uniqueFilename);
+
+        return DataBufferUtils.write(imageFile.content(), filePath, StandardOpenOption.CREATE)
+                .then(Mono.just(imageUrlPath + uniqueFilename))
+                .onErrorResume(IOException.class, e -> Mono.error(new RuntimeException("Failed to save store image file: " + originalFilename, e)));
+    }
+
+    private Flux<String> uploadImagesToStorage(Flux<FilePart> imageFiles) {
+        if (imageFiles == null) {
+            return Flux.empty();
+        }
+        return imageFiles.flatMap(this::uploadImageToStorage);
+    }
+
+    private Mono<Void> deleteImageFile(String imageUrl) {
+        if (imageUrl == null || imageUrl.isEmpty() || !imageUrl.startsWith(imageUrlPath)) {
+            return Mono.empty();
+        }
+        String relativePath = imageUrl.substring(imageUrlPath.length());
+        Path filePath = Paths.get(storageLocation).resolve(relativePath);
+        return Mono.fromRunnable(() -> {
+                    try {
+                        Files.deleteIfExists(filePath);
+                    } catch (IOException e) {
+                        System.err.println("--- Store Image Storage: Failed to delete image file: " + filePath + " - " + e.getMessage() + " ---");
+                    }
+                })
+                .subscribeOn(Schedulers.boundedElastic())
+                .then();
+    }
+
+    private Mono<Void> deleteImageFiles(List<String> imageUrls) {
+        if (imageUrls == null || imageUrls.isEmpty()) {
+            return Mono.empty();
+        }
+        return Flux.fromIterable(imageUrls)
+                .flatMap(this::deleteImageFile)
+                .then();
+    }
+
+    private Mono<Store> enrichStoreWithReviewInfo(Store store) {
+        if (store == null || store.getId() == null) {
+            return Mono.justOrEmpty(store);
+        }
+        Mono<Double> averageRatingMono = reviewService.getAverageRatingByStoreId(store.getId()).defaultIfEmpty(0.0);
+        Mono<Long> reviewCountMono = reviewService.findReviewsByStoreId(store.getId()).count().defaultIfEmpty(0L);
+
+        return Mono.zip(averageRatingMono, reviewCountMono)
+                .map(tuple -> {
+                    store.setAverageRating(tuple.getT1());
+                    store.setReviewCount(tuple.getT2().intValue());
+                    return store;
+                })
+                .defaultIfEmpty(store);
+    }
+
+    public Flux<Store> findAllStores() { // 페이지네이션 미적용 버전 (기존 유지)
+        System.out.println("--- StoreService: findAllStores 호출 (R2DBC) ---");
+        return storeRepository.findAll()
+                .flatMap(this::enrichStoreWithReviewInfo);
+    }
+
     public Mono<Store> findStoreById(Long id) {
         System.out.println("--- StoreService: findStoreById 호출 (ID: " + id + ", R2DBC) ---");
-        return storeRepository.findById(id) // R2dbcRepository의 findById()는 Mono<Store>를 반환
-                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id))) // Mono가 비어있으면 (데이터 없으면) 예외 발행
-                .doOnSuccess(store -> System.out.println("--- StoreService: 가게 찾음 (ID: " + id + ") ---"))
-                .doOnError(e -> System.err.println("--- StoreService: findStoreById 오류 - " + e.getMessage() + " ---"));
+        return storeRepository.findById(id)
+                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
+                .flatMap(this::enrichStoreWithReviewInfo);
     }
 
-    // 새로운 가게 생성 (요청 사용자 ID를 ownerId로 설정)
-    // userId는 Controller에서 X-User-Id 헤더에서 가져와 전달합니다.
-    public Mono<Store> createStore(Store store, String userId) { // userId 인자 추가
-        System.out.println("--- StoreService: createStore 호출 (Name: " + store.getName() + ", UserID: " + userId + ", R2DBC) ---");
-        // 1. 유효성 검증 (예: 필수 필드 누락 등) - 컨트롤러나 서비스에서 수행
+    public Mono<Store> createStore(Store store, String userId, Mono<FilePart> mainImageFileMono, Flux<FilePart> galleryImageFilesFlux) {
+        System.out.println("--- StoreService: createStore 호출 (Name: " + store.getName() + ", UserID: " + userId + ") ---");
         if (userId == null || userId.trim().isEmpty()) {
-            return Mono.error(new SecurityException("User ID is required to create a store.")); // 사용자 ID 없으면 오류 (403/401 매핑)
+            return Mono.error(new SecurityException("User ID is required to create a store."));
         }
-        if (store.getName() == null || store.getName().trim().isEmpty() /* || 다른 필수 필드 검증 */) {
-            return Mono.error(new IllegalArgumentException("Store name is required.")); // 필수 필드 누락 (400 매핑)
+        if (store.getName() == null || store.getName().trim().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("Store name is required."));
         }
 
+        store.setOwnerId(userId);
+        store.setCreatedAt(LocalDateTime.now());
+        store.setUpdatedAt(LocalDateTime.now());
+        store.setAverageRating(0.0);
+        store.setReviewCount(0);
 
-        // 2. 요청 사용자 ID를 가게의 ownerId로 설정
-        store.setOwnerId(userId); // <-- ownerId 설정
-        store.setCreatedAt(LocalDateTime.now()); // 생성 시간 설정 (Auditing이 자동 처리하지 않는다면 수동 설정)
-        store.setUpdatedAt(LocalDateTime.now()); // 수정 시간 설정 (생성 시에도 동일)
+        Mono<String> mainImageUrlMonoResult = mainImageFileMono
+                .flatMap(this::uploadImageToStorage)
+                .doOnNext(store::setMainImageUrl)
+                .defaultIfEmpty("");
 
+        Mono<List<String>> galleryImageUrlsMonoResult = galleryImageFilesFlux
+                .flatMap(this::uploadImageToStorage)
+                .collectList()
+                .defaultIfEmpty(new ArrayList<>());
 
-        // R2DBC는 ID 자동 생성 후 save 메서드의 반환 객체에 ID를 채워줌
-        return storeRepository.save(store) // R2dbcRepository의 save()는 Mono<Store>를 반환
-                .doOnSuccess(savedStore -> System.out.println("--- StoreService: 가게 생성 완료 (ID: " + savedStore.getId() + ", OwnerID: " + savedStore.getOwnerId() + ") ---"))
+        return Mono.zip(mainImageUrlMonoResult, galleryImageUrlsMonoResult)
+                .flatMap(tuple -> {
+                    List<String> galleryImageUrls = tuple.getT2();
+                    store.setGalleryImageUrls(galleryImageUrls);
+                    return storeRepository.save(store);
+                })
+                .doOnSuccess(savedStore -> System.out.println("--- StoreService: 가게 생성 완료 (ID: " + savedStore.getId() + ") ---"))
                 .doOnError(e -> System.err.println("--- StoreService: createStore 오류 - " + e.getMessage() + " ---"));
-        // 서비스 메서드는 발생한 예외를 Controller로 다시 발행하는 것이 일반적입니다.
     }
 
-    // 특정 가게 정보 수정 (가게 주인만 수정 가능)
-    // 순서: 찾기 -> 권한 확인 -> 업데이트 -> 저장
-    // userId는 Controller에서 X-User-Id 헤더에서 가져와 전달합니다.
-    public Mono<Store> updateStore(Long id, Store updatedStore, String userId) { // userId 인자 추가
-        System.out.println("--- StoreService: updateStore 호출 (ID: " + id + ", UserID: " + userId + ", R2DBC) ---");
-        // 1. 먼저 기존 가게를 ID로 찾습니다.
-        return storeRepository.findById(id) // Mono<Store> 반환
-                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id))) // 없으면 예외 발행 (404 매핑)
-                .flatMap(existingStore -> { // 가게를 찾으면 다음 단계 실행 (Mono<Store> -> Mono<Publisher<R>>)
-                    System.out.println("--- StoreService: 수정할 가게 찾음 (ID: " + id + ", OwnerID: " + existingStore.getOwnerId() + ") ---");
-
-                    // 2. 권한 확인: 기존 가게의 ownerId와 요청 사용자 ID 비교
+    public Mono<Store> updateStore(Long id, Store updatedStoreData, String userId, Mono<FilePart> newMainImageFileMono, Flux<FilePart> newGalleryImageFilesFlux, List<String> galleryImagesToDelete) {
+        // ... (이전 코드와 동일) ...
+        System.out.println("--- StoreService: updateStore 호출 (ID: " + id + ", UserID: " + userId + ") ---");
+        return storeRepository.findById(id)
+                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
+                .flatMap(existingStore -> {
                     if (userId == null || !userId.equals(existingStore.getOwnerId())) {
-                        // 사용자 ID가 null이거나 ownerId와 다르면 권한 없음 예외 발행 (403 매핑)
-                        System.err.println("--- StoreService: 권한 없음 - 사용자 ID " + userId + "는 가게 " + id + "의 주인이 아닙니다. ---");
                         return Mono.error(new SecurityException("User is not authorized to update this store."));
                     }
-                    System.out.println("--- StoreService: 권한 확인 통과 --- 업데이트 시작 ---");
+                    System.out.println("--- StoreService: 권한 확인 통과 --- 업데이트 시작 (Store ID: " + id + ") ---");
 
-                    // 3. 기존 가게 엔티티의 필드들을 업데이트할 데이터로 채웁니다.
-                    // 클라이언트에서 받은 updatedStore 객체에서 변경 가능한 필드만 복사합니다.
-                    // ID, ownerId, createdAt 등은 변경하지 않도록 합니다.
-                    existingStore.setName(updatedStore.getName());
-                    existingStore.setDescription(updatedStore.getDescription());
-                    existingStore.setAddress(updatedStore.getAddress());
-                    existingStore.setLatitude(updatedStore.getLatitude());
-                    existingStore.setLongitude(updatedStore.getLongitude());
-                    existingStore.setPhone(updatedStore.getPhone());
-                    existingStore.setOpeningHours(updatedStore.getOpeningHours());
-                    existingStore.setStatus(updatedStore.getStatus()); // Enum 타입 복사
-                    existingStore.setCategory(updatedStore.getCategory()); // Enum 타입 복사
-                    // Note: R2DBC Auditing 설정이 되어 있다면 updatedAt은 자동으로 처리됩니다. createdAt은 변경 안됨.
-                    existingStore.setUpdatedAt(LocalDateTime.now()); // Auditing이 자동 처리하지 않는다면 수동 설정
+                    existingStore.setName(updatedStoreData.getName());
+                    existingStore.setDescription(updatedStoreData.getDescription());
+                    existingStore.setAddress(updatedStoreData.getAddress());
+                    existingStore.setLatitude(updatedStoreData.getLatitude());
+                    existingStore.setLongitude(updatedStoreData.getLongitude());
+                    existingStore.setPhone(updatedStoreData.getPhone());
+                    existingStore.setOpeningHours(updatedStoreData.getOpeningHours());
+                    existingStore.setStatus(updatedStoreData.getStatus());
+                    existingStore.setCategory(updatedStoreData.getCategory());
+                    existingStore.setUpdatedAt(LocalDateTime.now());
 
+                    Mono<String> mainImageProcessingMono = newMainImageFileMono
+                            .flatMap(this::uploadImageToStorage)
+                            .flatMap(newMainUrl -> {
+                                String oldMainUrl = existingStore.getMainImageUrl();
+                                existingStore.setMainImageUrl(newMainUrl);
+                                return (oldMainUrl != null && !oldMainUrl.equals(newMainUrl)) ? deleteImageFile(oldMainUrl).thenReturn(newMainUrl) : Mono.just(newMainUrl);
+                            })
+                            .defaultIfEmpty(existingStore.getMainImageUrl() == null ? "" : existingStore.getMainImageUrl());
 
-                    // 4. 업데이트된 엔티티를 저장합니다.
-                    // save는 저장 후 업데이트된 Mono<Store> 반환
-                    return storeRepository.save(existingStore);
+                    Mono<List<String>> galleryProcessingMono = Mono.defer(() -> {
+                        List<String> currentGalleryUrls = new ArrayList<>(existingStore.getGalleryImageUrls());
+                        List<Mono<Void>> deleteMonos = new ArrayList<>();
+
+                        if (galleryImagesToDelete != null && !galleryImagesToDelete.isEmpty()) {
+                            galleryImagesToDelete.forEach(urlToDelete -> {
+                                if (currentGalleryUrls.remove(urlToDelete)) {
+                                    deleteMonos.add(deleteImageFile(urlToDelete));
+                                }
+                            });
+                        }
+
+                        return Flux.concat(deleteMonos).then(
+                                newGalleryImageFilesFlux
+                                        .flatMap(this::uploadImageToStorage)
+                                        .collectList()
+                                        .map(newUploadedUrls -> {
+                                            currentGalleryUrls.addAll(newUploadedUrls);
+                                            return currentGalleryUrls;
+                                        })
+                                        .defaultIfEmpty(currentGalleryUrls)
+                        );
+                    });
+
+                    return Mono.zip(mainImageProcessingMono, galleryProcessingMono)
+                            .flatMap(tuple -> {
+                                String finalMainImageUrl = tuple.getT1();
+                                List<String> finalGalleryImageUrls = tuple.getT2();
+                                existingStore.setMainImageUrl(finalMainImageUrl.isEmpty() ? null : finalMainImageUrl);
+                                existingStore.setGalleryImageUrls(finalGalleryImageUrls);
+                                return storeRepository.save(existingStore);
+                            });
                 })
+                .flatMap(this::enrichStoreWithReviewInfo)
                 .doOnSuccess(savedStore -> System.out.println("--- StoreService: 가게 수정 완료 (ID: " + id + ") ---"))
                 .doOnError(e -> System.err.println("--- StoreService: updateStore 오류 - " + e.getMessage() + " ---"));
-        // 서비스 메서드는 발생한 예외를 Controller로 다시 발행
     }
 
-    // 특정 가게 삭제 (가게 주인만 삭제 가능)
-    // 순서: 존재 확인 -> 권한 확인 -> 삭제
-    // userId는 Controller에서 X-User-Id 헤더에서 가져와 전달합니다.
-    public Mono<Void> deleteStore(Long id, String userId) { // userId 인자 추가
-        System.out.println("--- StoreService: deleteStore 호출 (ID: " + id + ", UserID: " + userId + ", R2DBC) ---");
-        // 1. 삭제할 가게를 먼저 찾습니다. (존재 확인 및 ownerId 파악)
+    public Mono<Void> deleteStore(Long id, String userId) {
+        // ... (이전 코드와 동일) ...
+        System.out.println("--- StoreService: deleteStore 호출 (ID: " + id + ", UserID: " + userId + ") ---");
         return storeRepository.findById(id)
-                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id))) // 없으면 예외 발행 (404 매핑)
-                .flatMap(existingStore -> { // 가게를 찾으면 다음 단계 실행
-                    System.out.println("--- StoreService: 삭제할 가게 찾음 (ID: " + id + ", OwnerID: " + existingStore.getOwnerId() + ") ---");
-
-                    // 2. 권한 확인: 기존 가게의 ownerId와 요청 사용자 ID 비교
+                .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
+                .flatMap(existingStore -> {
                     if (userId == null || !userId.equals(existingStore.getOwnerId())) {
-                        // 사용자 ID가 null이거나 ownerId와 다르면 권한 없음 예외 발행 (403 매핑)
-                        System.err.println("--- StoreService: 권한 없음 - 사용자 ID " + userId + "는 가게 " + id + "의 주인이 아닙니다. ---");
                         return Mono.error(new SecurityException("User is not authorized to delete this store."));
                     }
-                    System.out.println("--- StoreService: 권한 확인 통과 --- 삭제 시작 ---");
+                    System.out.println("--- StoreService: 권한 확인 통과 --- 가게 삭제 시작 (Store ID: " + id + ") ---");
 
-                    // 3. 권한이 확인되면 deleteById 호출
-                    // deleteById는 Mono<Void>를 반환하며 존재하지 않아도 오류 나지 않지만,
-                    // 우리는 이미 findById로 존재 여부를 확인했으므로 안전합니다.
-                    return storeRepository.deleteById(id)
-                            .doOnSuccess(aVoid -> System.out.println("--- StoreService: 가게 삭제 완료 (ID: " + id + ") ---"))
-                            .doOnError(e -> System.err.println("--- StoreService: deleteStore 오류 중 삭제 실패 - " + e.getMessage() + " ---"));
+                    Mono<Void> deleteMainImageMono = Mono.empty();
+                    if (existingStore.getMainImageUrl() != null) {
+                        deleteMainImageMono = deleteImageFile(existingStore.getMainImageUrl());
+                    }
+                    Mono<Void> deleteGalleryImagesMono = Mono.empty();
+                    List<String> galleryUrls = existingStore.getGalleryImageUrls();
+                    if (galleryUrls != null && !galleryUrls.isEmpty()) {
+                        deleteGalleryImagesMono = deleteImageFiles(galleryUrls);
+                    }
+
+                    return Mono.when(deleteMainImageMono, deleteGalleryImagesMono)
+                            .then(storeRepository.deleteById(id));
                 })
-                .onErrorResume(e -> {
-                    // findById 또는 flatMap 체인 중 발생한 오류를 잡습니다.
-                    System.err.println("--- StoreService: deleteStore 오류 - " + e.getMessage() + " ---");
-                    return Mono.error(e); // 오류를 컨트롤러로 다시 전달합니다.
+                .doOnSuccess(aVoid -> System.out.println("--- StoreService: 가게 삭제 완료 (ID: " + id + ") ---"))
+                .doOnError(e -> System.err.println("--- StoreService: deleteStore 오류 - " + e.getMessage() + " ---"));
+    }
+
+    public Flux<Store> searchAndFilterStores(
+            @Nullable String name,
+            @Nullable String categoryString, // StoreCategory Enum 대신 String으로 받음
+            Pageable pageable) {
+        System.out.println("--- StoreService: searchAndFilterStores 호출 (Name: " + name + ", Category: " + categoryString + ", Page: " + pageable.getPageNumber() + ", Size: " + pageable.getPageSize() + ") ---");
+
+        Flux<Store> storesFlux;
+        if (name != null && !name.isEmpty() && categoryString != null && !categoryString.isEmpty()) {
+            // StoreCategory enum 변환 (StoreCategory Enum이 정의되어 있다고 가정)
+            // StoreCategory categoryEnum = StoreCategory.fromString(categoryString.toUpperCase()); // 이 메서드가 StoreCategory Enum에 있어야 함
+            // storesFlux = storeRepository.findByNameContainingIgnoreCaseAndCategory(name, categoryEnum, pageable);
+            // 임시: 이름과 카테고리 둘 다 필터링하는 Repository 메서드가 없으므로, 이름으로만 검색 후 애플리케이션 레벨에서 필터링 (비효율적)
+            // 또는 Repository에 해당 메서드 추가 필요
+            storesFlux = storeRepository.findByNameContainingIgnoreCase(name, pageable)
+                    .filter(store -> categoryString.equalsIgnoreCase(store.getCategory().name())); // StoreCategory Enum 가정
+            System.out.println("--- StoreService: Searching by name AND category (filtering category in-memory) ---");
+        } else if (name != null && !name.isEmpty()) {
+            storesFlux = storeRepository.findByNameContainingIgnoreCase(name, pageable);
+            System.out.println("--- StoreService: Searching by name only ---");
+        } else if (categoryString != null && !categoryString.isEmpty()) {
+            // StoreCategory categoryEnum = StoreCategory.fromString(categoryString.toUpperCase());
+            // storesFlux = storeRepository.findByCategory(categoryEnum, pageable); // Repository에 이 메서드 필요
+            // 임시: 카테고리 단독 검색 Repository 메서드 없다고 가정하고, findAll 후 필터링 (매우 비효율적)
+            storesFlux = storeRepository.findAll(pageable.getSort()) // 정렬만 적용
+                    .filter(store -> categoryString.equalsIgnoreCase(store.getCategory().name()))
+                    .skip(pageable.getOffset()).take(pageable.getPageSize()); // 수동 페이지네이션
+            System.out.println("--- StoreService: Searching by category only (filtering in-memory, inefficient) ---");
+        } else {
+            // storeRepository.findAllBy(pageable) 또는 findAll(Sort) 후 수동 페이지네이션
+            storesFlux = storeRepository.findAll(pageable.getSort())
+                    .skip(pageable.getOffset()).take(pageable.getPageSize());
+            System.out.println("--- StoreService: Finding all with pagination and sort ---");
+        }
+        return storesFlux.flatMap(this::enrichStoreWithReviewInfo);
+    }
+
+    /**
+     * 메뉴 이름 키워드를 포함하는 메뉴가 있는 가게들을 검색합니다. (페이지네이션 지원)
+     * @param menuNameKeyword 메뉴 이름 검색 키워드
+     * @param pageable 페이지 정보
+     * @return 검색된 가게 목록 (Flux<Store>)
+     */
+    public Flux<Store> findStoresByMenuName(String menuNameKeyword, Pageable pageable) {
+        System.out.println("--- StoreService: findStoresByMenuName 호출 (Keyword: " + menuNameKeyword + ") ---");
+        if (menuNameKeyword == null || menuNameKeyword.trim().isEmpty()) {
+            return Flux.empty(); // 키워드가 없으면 빈 결과 반환
+        }
+        return menuService.getStoreIdsByMenuNameKeyword(menuNameKeyword) // Flux<Long> (storeId 목록)
+                .collectList() // Mono<List<Long>>
+                .flatMapMany(storeIds -> {
+                    if (storeIds.isEmpty()) {
+                        return Flux.empty();
+                    }
+                    // findAllById는 Pageable을 직접 지원하지 않으므로, ID 목록으로 조회 후 수동 페이지네이션
+                    // 또는 StoreRepository에 List<Long>과 Pageable을 받는 커스텀 메서드 필요
+                    return storeRepository.findAllByIdIn(storeIds, pageable.getSort()) // findAllByIdIn(List<Long> ids, Sort sort)
+                            .skip(pageable.getOffset())
+                            .take(pageable.getPageSize())
+                            .flatMap(this::enrichStoreWithReviewInfo);
                 });
     }
-
-    // 가게 이름으로 검색 (권한 확인 필요 없음)
-    // findByNameContainingIgnoreCase 메서드가 StoreRepository에 정의되어 있어야 합니다.
-    // public interface StoreRepository extends R2dbcRepository<Store, Long> { ... Flux<Store> findByNameContainingIgnoreCase(String name); ... }
-    public Flux<Store> searchStoresByName(String name) {
-        System.out.println("--- StoreService: searchStoresByName 호출 (검색어: " + name + ", R2DBC) ---");
-        // R2dbcRepository의 쿼리 메서드 호출
-        return storeRepository.findByNameContainingIgnoreCase(name) // <-- 이 메서드가 StoreRepository에 정의되어 있다고 가정
-                .doOnComplete(() -> System.out.println("--- StoreService: searchStoresByName 완료 ---"))
-                .doOnError(e -> System.err.println("--- StoreService: searchStoresByName 오류 - " + e.getMessage() + " ---"));
-    }
-
-
 }

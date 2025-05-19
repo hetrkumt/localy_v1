@@ -28,7 +28,6 @@ if (flutterVersionName == null) {
 }
 
 android {
-    // TODO: 실제 앱의 패키지 이름으로 변경하세요. (예: com.yourcompany.yourappname)
     namespace = "com.example.localy_front_flutter"
     // 플러그인 요구사항에 맞춰 compileSdk 버전을 35로 직접 지정합니다.
     compileSdk = 35

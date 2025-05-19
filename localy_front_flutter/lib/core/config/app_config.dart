@@ -16,7 +16,7 @@ class AppConfig {
   // 이 값은 Flutter 프로젝트의 android/app/build.gradle 파일의 applicationId와 일치해야 하며,
   // 네이버 클라우드 플랫폼의 'Android 앱 패키지 이름'에 등록된 값과도 일치해야 합니다.
   // Dart 코드 내에서 직접 사용될 일은 적을 수 있지만, 참고용으로 관리할 수 있습니다.
-  static const String androidPackageName = 'com.example.localy.localy_front_flutter';
+  static const String androidPackageName = 'com.example.localy_front_flutter';
 
 // iOS Bundle ID (iOS 앱을 빌드하고 네이버 지도를 사용한다면 필요)
 // static const String iosBundleId = 'YOUR_IOS_BUNDLE_ID'; // 필요시 주석 해제 및 값 입력

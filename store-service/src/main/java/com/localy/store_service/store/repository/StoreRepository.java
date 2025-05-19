@@ -1,22 +1,24 @@
 package com.localy.store_service.store.repository;
 
 import com.localy.store_service.store.domain.Store;
+// import com.localy.store_service.store.domain.StoreCategory; // 필요시 사용
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort; // Sort 임포트
 import org.springframework.data.r2dbc.repository.R2dbcRepository;
-import org.springframework.stereotype.Repository; // Repository 어노테이션 임포트
+import org.springframework.data.repository.query.ReactiveQueryByExampleExecutor;
 import reactor.core.publisher.Flux;
+import java.util.List; // List 임포트
 
-@Repository // 이 인터페이스가 Repository 컴포넌트임을 나타냅니다.
-public interface StoreRepository extends R2dbcRepository<Store, Long> { // R2DBC Repository로 변경
-    // R2dbcRepository는 기본적으로 다음 메서드들을 Reactive 타입으로 제공:
-    // Mono<Store> findById(Long id);
-    // Flux<Store> findAll();
-    // Mono<Store> save(Store store);
-    // Mono<Void> deleteById(Long id);
-    // Mono<Boolean> existsById(Long id);
-    // Mono<Long> count();
+public interface StoreRepository extends R2dbcRepository<Store, Long>, ReactiveQueryByExampleExecutor<Store> {
 
-    // --- 새로운 기능: 가게 이름을 포함하는 모든 가게 조회 (대소문자 구분 없음) ---
-    // R2DBC Repository도 쿼리 메서드 네이밍 규칙을 지원하며 Reactive 타입을 반환합니다.
-    Flux<Store> findByNameContainingIgnoreCase(String name);
-    // ------------------------------------------------------------------
+    Flux<Store> findByNameContainingIgnoreCase(String name, Pageable pageable);
+
+    // Flux<Store> findByCategory(StoreCategory category, Pageable pageable);
+    // Flux<Store> findByNameContainingIgnoreCaseAndCategory(String name, StoreCategory category, Pageable pageable);
+
+    // ID 목록과 Sort 정보를 받아 가게 목록을 반환하는 메서드 (페이지네이션은 서비스에서 수동 처리)
+    Flux<Store> findAllByIdIn(List<Long> ids, Sort sort);
+
+    // 만약 Pageable을 직접 지원하는 findAllByIdIn이 있다면 그것을 사용해도 좋습니다.
+    // Flux<Store> findAllByIdIn(List<Long> ids, Pageable pageable);
 }
