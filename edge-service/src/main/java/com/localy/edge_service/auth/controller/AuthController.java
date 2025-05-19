@@ -35,6 +35,7 @@ public class AuthController {
                 .onErrorResume(error -> Mono.just(ResponseEntity.status(401)
                         .body("Authentication failed: " + error.getMessage()))); // 실패 시 401 응답
     }
+
     @PostMapping("/logout")
     public Mono<ResponseEntity<String>> logout(@RequestHeader("Authorization") String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {

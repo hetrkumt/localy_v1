@@ -151,5 +151,5 @@ public class StoreService {
                 .doOnError(e -> System.err.println("--- StoreService: searchStoresByName 오류 - " + e.getMessage() + " ---"));
     }
 
-    // Note: StoreRepository에 findByNameContainingIgnoreCase(String name) 메서드를 추가해야 합니다.
+
 }

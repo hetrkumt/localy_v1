@@ -1,0 +1,38 @@
+// 파일 위치: android/build.gradle (프로젝트 최상위 android 폴더 내)
+
+buildscript {
+    // Kotlin 버전을 ext 블록에 정의합니다.
+    // 이 버전은 아래 dependencies 블록의 kotlin-gradle-plugin 버전과 일치해야 합니다.
+    ext.kotlin_version = '1.9.23' // <--- 이 줄이 정확히 여기에 있어야 합니다!
+
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Android Gradle Plugin (AGP) 버전
+        classpath 'com.android.tools.build:gradle:8.4.0'
+
+        // Kotlin Gradle Plugin 버전 - 위 ext.kotlin_version과 일치시킵니다.
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version" // $kotlin_version 변수 사용
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.buildDir = '../build'
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(':app')
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}

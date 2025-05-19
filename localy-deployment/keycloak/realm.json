@@ -79,15 +79,19 @@
     {
       "clientId": "user-service",
       "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "user-secret",
+      "serviceAccountsEnabled": true, 
+      "publicClient": false,
+      "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:9001/*"
       ],
-      "clientAuthenticatorType": "client-secret",
-      "secret": "user-secret",
-      "serviceAccountsEnabled": true,
-      "publicClient": false,
-      "protocol": "openid-connect"
-
+      
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "authorizationServicesEnabled": true 
     }
 
   ]

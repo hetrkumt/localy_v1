@@ -1,6 +1,6 @@
 package com.localy.userservice.user_service.controller;
 
-import com.localy.userservice.user_service.UserRegistrationRequest;
+import com.localy.userservice.user_service.domain.UserRegistrationRequest;
 import com.localy.userservice.user_service.service.KeycloakAdminService;
 import jakarta.validation.Valid; // Jakarta EE 9+ (Spring Boot 3+)
 // import javax.validation.Valid; // Java EE (Spring Boot 2.x)
