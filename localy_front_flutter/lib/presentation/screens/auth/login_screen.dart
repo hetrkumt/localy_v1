@@ -1,14 +1,16 @@
 // 파일 위치: lib/presentation/screens/auth/login_screen.dart
 import 'package:flutter/material.dart';
-import '../../../data/models/auth_models.dart';
-import '../../../data/services/auth_api_service.dart';
-// HomeScreen이 정의된 파일을 정확히 import 해야 합니다.
-// 예시 경로이며, 실제 파일 위치에 맞게 수정하세요.
+import 'package:localy_front_flutter/data/models/auth_models.dart';
+// AuthApiService 직접 임포트 대신 AuthProvider 사용
+// import '../../../data/services/auth_api_service.dart';
+import 'package:localy_front_flutter/presentation/providers/auth_provider.dart'; // AuthProvider 임포트
+import 'package:provider/provider.dart'; // Provider 임포트
+
 import '../home/home_screen.dart'; // 로그인 성공 후 이동할 홈 화면
 import 'registration_screen.dart'; // 회원가입 화면
 
 class LoginScreen extends StatefulWidget {
-  static const String routeName = '/login'; // 명명된 라우트 사용 시
+  static const String routeName = '/login';
   const LoginScreen({super.key});
 
   @override
@@ -22,7 +24,8 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  final AuthApiService _authApiService = AuthApiService();
+  // AuthApiService 직접 인스턴스화 제거
+  // final AuthApiService _authApiService = AuthApiService();
 
   Future<void> _performLogin() async {
     if (!_formKey.currentState!.validate()) {
@@ -33,23 +36,43 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
 
+    // AuthProvider 가져오기
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
     try {
       final loginRequest = LoginRequest(
         username: _usernameController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      final LoginResponse loginData = await _authApiService.login(loginRequest);
-      debugPrint('로그인 성공! AccessToken: ${loginData.accessToken}');
-
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomeScreen()), // HomeScreen으로 이동
-        );
+      // AuthProvider의 login 메서드 호출
+      await authProvider.login(loginRequest);
+      // 로그인 성공 시 AuthProvider의 isAuthenticated 상태가 true로 변경됨
+      // MyApp 위젯에서 이 상태를 감지하여 HomeScreen으로 자동 전환될 수 있지만,
+      // 명시적으로 이동하고 이전 화면을 스택에서 제거하는 것이 좋습니다.
+      if (mounted && authProvider.isAuthenticated) { // 로그인 성공 여부 확인
+        Navigator.of(context).pushReplacementNamed(HomeScreen.routeName);
+      } else if (mounted) {
+        // AuthProvider.login이 성공했으나 isAuthenticated가 false인 경우는 거의 없지만,
+        // 만약의 경우를 대비해 에러 메시지 설정 (또는 AuthProvider.login이 예외를 던지지 않고 실패를 반환하는 경우)
+        setState(() {
+          _errorMessage = '로그인에 실패했습니다. 다시 시도해주세요.';
+        });
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll("Exception: ", "");
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll("Exception: ", "");
+          if (_errorMessage!.toLowerCase().contains("failed host lookup") || _errorMessage!.toLowerCase().contains("connection refused")) {
+            _errorMessage = "서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.";
+          } else if (_errorMessage!.toLowerCase().contains("keycloak 인증 실패") || _errorMessage!.toLowerCase().contains("unauthorized")) {
+            _errorMessage = "아이디 또는 비밀번호가 올바르지 않습니다.";
+          } else {
+            // 기타 일반적인 오류 메시지 (너무 길면 자르기)
+            _errorMessage = "로그인 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+            debugPrint('로그인 API 호출 실패 원본: $e');
+          }
+        });
+      }
       debugPrint('로그인 API 호출 실패: $e');
     } finally {
       if (mounted) {
@@ -142,9 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Text("계정이 없으신가요? "),
                       TextButton(
                         onPressed: () {
-                          Navigator.of(context).push(MaterialPageRoute(
-                            builder: (context) => const RegistrationScreen(),
-                          ));
+                          Navigator.of(context).pushNamed(RegistrationScreen.routeName);
                         },
                         child: Text(
                           '회원가입',

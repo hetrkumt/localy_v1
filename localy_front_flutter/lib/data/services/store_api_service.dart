@@ -1,243 +1,134 @@
 // 파일 위치: lib/data/services/store_api_service.dart
-import 'dart:convert'; // jsonEncode 사용
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
-import 'package:image_picker/image_picker.dart'; // XFile 사용을 위해 추가
-
-import '../models/store_models.dart';
-import 'api_client.dart';
+import 'package:localy_front_flutter/data/models/store_models.dart';
+import 'api_client.dart'; // ApiClient 임포트
+import 'package:localy_front_flutter/core/config/app_config.dart'; // AppConfig 임포트
 
 class StoreApiService {
-  final ApiClient _apiClient;
+  final ApiClient apiClient;
 
-  StoreApiService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
+  StoreApiService({required this.apiClient});
 
-  // --- 가게 (Store) API ---
-  Future<List<Store>> getAllStores() async {
-    try {
-      final response = await _apiClient.get('/stores', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return responseData.map((json) => Store.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint("StoreApiService: 모든 가게 조회 실패 - $e");
-      // 오류 메시지를 좀 더 구체적으로 전달
-      if (e.toString().contains("subtype of type 'List<dynamic>'")) {
-        throw Exception("가게 목록 응답 형식이 잘못되었습니다. 서버 응답을 확인해주세요.");
+  // 가게 목록 조회 (검색, 필터링, 페이지네이션, 정렬 기능 포함)
+  Future<List<Store>> fetchStores({
+    String? name, // 가게 이름 검색어
+    String? category, // 카테고리 필터 (StoreCategory enum의 문자열 값)
+    String? menuKeyword, // 메뉴 이름 검색어
+    String? sortBy, // 정렬 기준 (예: "name", "averageRating", "reviewCount", "createdAt")
+    String? sortDirection, // 정렬 방향 ("ASC" 또는 "DESC")
+    int page = 0, // 페이지 번호 (0부터 시작)
+    int size = 10, // 페이지 당 아이템 수
+  }) async {
+    // API 엔드포인트
+    final UriBuilder uriBuilder = UriBuilder(
+      scheme: Uri.parse(AppConfig.baseUrl).scheme,
+      host: Uri.parse(AppConfig.baseUrl).host,
+      port: Uri.parse(AppConfig.baseUrl).port,
+      path: '${Uri.parse(AppConfig.baseUrl).path}/stores', // 기본 경로에 /stores 추가
+    );
+
+    // 쿼리 파라미터 추가
+    final Map<String, String> queryParams = {
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+
+    if (name != null && name.isNotEmpty) {
+      queryParams['name'] = name;
+    }
+    if (category != null && category.isNotEmpty) {
+      queryParams['category'] = category;
+    }
+    if (menuKeyword != null && menuKeyword.isNotEmpty) {
+      queryParams['menuKeyword'] = menuKeyword;
+    }
+    if (sortBy != null && sortBy.isNotEmpty) {
+      queryParams['sortBy'] = sortBy;
+      if (sortDirection != null && sortDirection.isNotEmpty) {
+        queryParams['sortDirection'] = sortDirection;
       }
-      throw Exception("가게 목록을 불러오는데 실패했습니다.");
     }
-  }
+    uriBuilder.queryParams = queryParams;
 
-  Future<Store> getStoreById(int storeId) async {
-    try {
-      final response = await _apiClient.get('/stores/$storeId', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Store.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: ID로 가게 조회 실패 (ID: $storeId) - $e");
-      throw Exception("가게 정보를 불러오는데 실패했습니다.");
-    }
-  }
+    final Uri uri = uriBuilder.build();
+    debugPrint('--- StoreApiService: Fetching stores from URL: $uri ---');
 
-  Future<List<Store>> searchStoresByName(String name) async {
     try {
-      final response = await _apiClient.get('/stores/search?name=${Uri.encodeComponent(name)}', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return responseData.map((json) => Store.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint("StoreApiService: 이름으로 가게 검색 실패 (Name: $name) - $e");
-      throw Exception("가게 검색에 실패했습니다.");
-    }
-  }
+      // ApiClient를 사용하여 GET 요청
+      final response = await apiClient.get(uri.toString()); // apiClient.get은 String URL을 받음
 
-  Future<Store> createStore(Store storeData) async {
-    try {
-      final response = await _apiClient.post('/stores', storeData.toJson());
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Store.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: 가게 생성 실패 - $e");
-      throw Exception("가게 생성에 실패했습니다. 입력 정보를 확인해주세요.");
-    }
-  }
-
-  Future<Store> updateStore(int storeId, Store storeData) async {
-    try {
-      final response = await _apiClient.put('/stores/$storeId', storeData.toJson());
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Store.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: 가게 수정 실패 (ID: $storeId) - $e");
-      throw Exception("가게 정보 수정에 실패했습니다.");
-    }
-  }
-
-  Future<void> deleteStore(int storeId) async {
-    try {
-      final response = await _apiClient.delete('/stores/$storeId');
-      _apiClient.processResponse(response); // 본문 없는 성공 응답 기대
-    } catch (e) {
-      debugPrint("StoreApiService: 가게 삭제 실패 (ID: $storeId) - $e");
-      throw Exception("가게 삭제에 실패했습니다.");
-    }
-  }
-
-  // --- 메뉴 (Menu) API ---
-  Future<Menu> getMenuById(int menuId) async {
-    try {
-      final response = await _apiClient.get('/menus/$menuId', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Menu.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: ID로 메뉴 조회 실패 (ID: $menuId) - $e");
-      throw Exception("메뉴 정보를 불러오는데 실패했습니다.");
-    }
-  }
-
-  Future<List<Menu>> getMenusByStoreId(int storeId) async {
-    try {
-      final response = await _apiClient.get('/menus/stores/$storeId/menus', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return responseData.map((json) => Menu.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint("StoreApiService: 특정 가게 메뉴 조회 실패 (StoreID: $storeId) - $e");
-      throw Exception("가게의 메뉴 목록을 불러오는데 실패했습니다.");
-    }
-  }
-
-  Future<Menu> createMenu(Menu menuData, {XFile? imageXFile}) async {
-    try {
-      final Map<String, String> fields = {
-        'menu': jsonEncode(menuData.toJson())
-      };
-      final List<http.MultipartFile> files = [];
-      if (imageXFile != null) {
-        files.add(await http.MultipartFile.fromPath(
-          'image',
-          imageXFile.path,
-          filename: imageXFile.name,
-        ));
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = json.decode(utf8.decode(response.bodyBytes));
+        List<Store> stores = responseData.map((data) => Store.fromJson(data)).toList();
+        debugPrint('--- StoreApiService: Fetched ${stores.length} stores ---');
+        return stores;
+      } else {
+        // 오류 처리
+        debugPrint('--- StoreApiService: Failed to load stores. Status code: ${response.statusCode} ---');
+        debugPrint('--- StoreApiService: Response body: ${response.body} ---');
+        throw Exception('Failed to load stores: ${response.statusCode}');
       }
-      final streamedResponse = await _apiClient.multipartRequest('POST', '/menus', fields, files);
-      final response = await http.Response.fromStream(streamedResponse);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Menu.fromJson(responseData);
     } catch (e) {
-      debugPrint("StoreApiService: 메뉴 생성 실패 - $e");
-      throw Exception("메뉴 생성에 실패했습니다. 이미지나 입력 정보를 확인해주세요.");
+      debugPrint('--- StoreApiService: Error fetching stores: $e ---');
+      rethrow; // 예외를 다시 던져 Provider에서 처리할 수 있도록 함
     }
   }
 
-  Future<Menu> updateMenu(int menuId, Menu menuData, {XFile? imageXFile}) async {
+  // 특정 가게 상세 정보 조회
+  Future<Store> fetchStoreById(int storeId) async {
+    final String url = '${AppConfig.baseUrl}/stores/$storeId';
+    debugPrint('--- StoreApiService: Fetching store by ID from URL: $url ---');
+
     try {
-      final Map<String, String> fields = {
-        'menu': jsonEncode(menuData.toJson())
-      };
-      final List<http.MultipartFile> files = [];
-      if (imageXFile != null) {
-        files.add(await http.MultipartFile.fromPath(
-          'image',
-          imageXFile.path,
-          filename: imageXFile.name,
-        ));
+      final response = await apiClient.get(url);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = json.decode(utf8.decode(response.bodyBytes));
+        Store store = Store.fromJson(responseData);
+        debugPrint('--- StoreApiService: Fetched store: ${store.name} ---');
+        return store;
+      } else {
+        debugPrint('--- StoreApiService: Failed to load store by ID. Status code: ${response.statusCode} ---');
+        debugPrint('--- StoreApiService: Response body: ${response.body} ---');
+        throw Exception('Failed to load store by ID: ${response.statusCode}');
       }
-      final streamedResponse = await _apiClient.multipartRequest('PUT', '/menus/$menuId', fields, files);
-      final response = await http.Response.fromStream(streamedResponse);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Menu.fromJson(responseData);
     } catch (e) {
-      debugPrint("StoreApiService: 메뉴 수정 실패 (ID: $menuId) - $e");
-      throw Exception("메뉴 수정에 실패했습니다.");
+      debugPrint('--- StoreApiService: Error fetching store by ID: $e ---');
+      rethrow;
     }
   }
 
-  Future<void> deleteMenu(int menuId) async {
-    try {
-      final response = await _apiClient.delete('/menus/$menuId');
-      _apiClient.processResponse(response);
-    } catch (e) {
-      debugPrint("StoreApiService: 메뉴 삭제 실패 (ID: $menuId) - $e");
-      throw Exception("메뉴 삭제에 실패했습니다.");
-    }
-  }
+// TODO: 가게 생성, 수정, 삭제 API 호출 메서드 추가 (필요시)
+// 예: Future<Store> createStore(Store storeData, File? mainImage, List<File>? galleryImages) async { ... }
+// 멀티파트 요청을 위해 http 패키지의 MultipartRequest 또는 dio 패키지 사용 고려
+}
 
-  // --- 리뷰 (Review) API ---
-  Future<Review> getReviewById(int reviewId) async {
-    try {
-      final response = await _apiClient.get('/reviews/$reviewId', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Review.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: ID로 리뷰 조회 실패 (ID: $reviewId) - $e");
-      throw Exception("리뷰 정보를 불러오는데 실패했습니다.");
-    }
-  }
 
-  Future<List<Review>> getReviewsByStoreId(int storeId) async {
-    try {
-      final response = await _apiClient.get('/reviews/stores/$storeId/reviews', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return responseData.map((json) => Review.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint("StoreApiService: 특정 가게 리뷰 조회 실패 (StoreID: $storeId) - $e");
-      throw Exception("가게의 리뷰 목록을 불러오는데 실패했습니다.");
-    }
-  }
+// UriBuilder 헬퍼 클래스 (기존 프로젝트에 없다면 추가)
+class UriBuilder {
+  String scheme;
+  String host;
+  int? port;
+  String path;
+  Map<String, String>? queryParams;
 
-  Future<List<Review>> getReviewsByUserId(String userId) async {
-    try {
-      final response = await _apiClient.get('/reviews/users/$userId/reviews', requiresAuth: false);
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final List<dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return responseData.map((json) => Review.fromJson(json)).toList();
-    } catch (e) {
-      debugPrint("StoreApiService: 특정 사용자 리뷰 조회 실패 (UserID: $userId) - $e");
-      throw Exception("사용자의 리뷰 목록을 불러오는데 실패했습니다.");
-    }
-  }
+  UriBuilder({
+    required this.scheme,
+    required this.host,
+    this.port,
+    required this.path,
+    this.queryParams,
+  });
 
-  Future<Review> submitReview(Review reviewData) async {
-    try {
-      final response = await _apiClient.post('/reviews', reviewData.toJson());
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Review.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: 리뷰 제출 실패 - $e");
-      throw Exception("리뷰 제출에 실패했습니다. 입력 내용을 확인해주세요.");
-    }
-  }
-
-  Future<Review> updateReview(int reviewId, Review reviewData) async {
-    try {
-      final response = await _apiClient.put('/reviews/$reviewId', reviewData.toJson());
-      // *** 수정된 부분: expectFullJsonResponse: true 추가 ***
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      return Review.fromJson(responseData);
-    } catch (e) {
-      debugPrint("StoreApiService: 리뷰 수정 실패 (ID: $reviewId) - $e");
-      throw Exception("리뷰 수정에 실패했습니다.");
-    }
-  }
-
-  Future<void> deleteReview(int reviewId) async {
-    try {
-      final response = await _apiClient.delete('/reviews/$reviewId');
-      _apiClient.processResponse(response);
-    } catch (e) {
-      debugPrint("StoreApiService: 리뷰 삭제 실패 (ID: $reviewId) - $e");
-      throw Exception("리뷰 삭제에 실패했습니다.");
-    }
+  Uri build() {
+    return Uri(
+      scheme: scheme,
+      host: host,
+      port: port,
+      path: path,
+      queryParameters: queryParams,
+    );
   }
 }

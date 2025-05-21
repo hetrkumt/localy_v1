@@ -1,82 +1,97 @@
 // 파일 위치: lib/data/models/store_models.dart
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart'; // Color 사용을 위해
+import 'package:localy_front_flutter/data/models/menu_models.dart'; // Menu 모델 임포트
+import 'package:localy_front_flutter/data/models/review_models.dart'; // Review 모델 임포트
 
-// 가게 상태를 나타내는 Enum
-enum StoreStatus { OPEN, PREPARING, CLOSED, UNKNOWN }
-
-// 가게 카테고리를 나타내는 Enum
-enum StoreCategory { KOREAN, PIZZA, CAFE, CHINESE, JAPANESE, FAST_FOOD, UNKNOWN }
-
-// 문자열을 StoreStatus Enum으로 변환하는 함수
-StoreStatus storeStatusFromString(String? statusString) {
-  switch (statusString?.toUpperCase()) {
-    case 'OPEN':
-      return StoreStatus.OPEN;
-    case 'PREPARING':
-      return StoreStatus.PREPARING;
-    case 'CLOSED':
-      return StoreStatus.CLOSED;
-    default:
-      debugPrint("StoreStatus: 알 수 없는 상태 문자열 '$statusString', UNKNOWN으로 처리합니다.");
-      return StoreStatus.UNKNOWN;
-  }
+// 가게 카테고리 Enum (백엔드와 일치하도록 수정)
+enum StoreCategory {
+  FRUITS_VEGETABLES, // 청과 (과일, 채소)
+  MEAT_BUTCHER,      // 정육점
+  FISH_SEAFOOD,      // 수산물, 어시장
+  RICE_GRAINS,       // 쌀, 잡곡
+  SIDE_DISHES,       // 반찬가게
+  DAIRY_PRODUCTS,    // 유제품 (우유, 치즈, 요거트 등)
+  BREAD_BAKERY,      // 빵집, 베이커리
+  NUTS_DRIED_FRUITS, // 견과류, 건어물
+  KOREAN_FOOD,       // 한식 (일반 식당)
+  SNACKS_STREET_FOOD,// 분식, 길거리 음식, 간편식
+  CHINESE_FOOD,      // 중식
+  JAPANESE_FOOD,     // 일식
+  WESTERN_FOOD,      // 양식 (피자, 파스타 등)
+  CAFE_DESSERT,      // 카페, 디저트
+  CHICKEN_BURGER,    // 치킨, 버거, 샌드위치
+  HOUSEHOLD_GOODS,   // 생활용품, 잡화
+  FLOWERS_PLANTS,    // 꽃집, 화원
+  HEALTH_FOOD,       // 건강식품, 건강원
+  PET_SUPPLIES,      // 애견용품
+  CLOTHING_ACCESSORIES, // 의류, 액세서리
+  OTHER_ETC,         // 기타
+  UNKNOWN            // 알 수 없는 카테고리 (기본값 또는 오류 처리용)
 }
 
-// StoreStatus Enum을 문자열로 변환하는 함수 (API 요청 시 필요할 수 있음)
-String storeStatusToString(StoreStatus status) {
-  if (status == StoreStatus.UNKNOWN) return 'UNKNOWN'; // 또는 서버가 기대하는 기본값
-  return status.toString().split('.').last; // 예: "OPEN"
-}
-
-// 문자열을 StoreCategory Enum으로 변환하는 함수
+// StoreCategory Enum <-> String 변환 함수
 StoreCategory storeCategoryFromString(String? categoryString) {
-  switch (categoryString?.toUpperCase()) {
-    case 'KOREAN':
-      return StoreCategory.KOREAN;
-    case 'PIZZA':
-      return StoreCategory.PIZZA;
-    case 'CAFE':
-      return StoreCategory.CAFE;
-    case 'CHINESE':
-      return StoreCategory.CHINESE;
-    case 'JAPANESE':
-      return StoreCategory.JAPANESE;
-    case 'FAST_FOOD': // 백엔드 Enum 값과 일치하도록
-      return StoreCategory.FAST_FOOD;
-    default:
-      debugPrint("StoreCategory: 알 수 없는 카테고리 문자열 '$categoryString', UNKNOWN으로 처리합니다.");
-      return StoreCategory.UNKNOWN;
+  if (categoryString == null) return StoreCategory.UNKNOWN;
+  try {
+    return StoreCategory.values.firstWhere(
+            (e) => e.toString().split('.').last == categoryString.toUpperCase());
+  } catch (e) {
+    return StoreCategory.UNKNOWN; // 매칭되는 값이 없으면 UNKNOWN 반환
   }
 }
 
-// StoreCategory Enum을 문자열로 변환하는 함수
 String storeCategoryToString(StoreCategory category) {
-  if (category == StoreCategory.UNKNOWN) return 'UNKNOWN';
-  if (category == StoreCategory.FAST_FOOD) return 'FAST_FOOD'; // 백엔드와 일치
   return category.toString().split('.').last;
 }
 
-// 가게 정보를 담는 데이터 모델
-@immutable
+// 가게 상태 Enum
+enum StoreStatus {
+  OPEN,      // 영업 중
+  CLOSED,    // 영업 종료 (일시적 또는 영구적)
+  PREPARING, // 오픈 준비 중
+  UNKNOWN    // 알 수 없음
+}
+
+StoreStatus storeStatusFromString(String? statusString) {
+  if (statusString == null) return StoreStatus.UNKNOWN;
+  try {
+    return StoreStatus.values.firstWhere(
+            (e) => e.toString().split('.').last == statusString.toUpperCase());
+  } catch (e) {
+    return StoreStatus.UNKNOWN;
+  }
+}
+
+String storeStatusToString(StoreStatus status) {
+  return status.toString().split('.').last;
+}
+
+
+// 가게 정보 모델
 class Store {
-  final int id; // Long은 Dart에서 int로 표현
+  final int id;
   final String ownerId;
   final String name;
   final String? description;
   final String? address;
-  final double? latitude;  // double? (nullable)
-  final double? longitude; // double? (nullable)
+  final double? latitude;
+  final double? longitude;
   final String? phone;
   final String? openingHours;
   final StoreStatus status;
   final StoreCategory category;
+  final String? mainImageUrl; // 가게 대표 이미지 URL
+  final List<String>? galleryImageUrls; // 가게 갤러리 이미지 URL 목록
   final DateTime createdAt;
-  final DateTime? updatedAt;
-  // 메뉴, 리뷰 목록은 상세 조회 API를 통해 별도로 가져오거나,
-  // 백엔드 응답에 따라 이 모델에 List<Menu>, List<Review> 형태로 포함될 수 있습니다.
-  // 현재는 포함하지 않음.
+  final DateTime updatedAt;
+  final List<Menu>? menus; // 가게 상세 정보 조회 시 포함될 수 있음
+  final List<Review>? reviews; // 가게 상세 정보 조회 시 포함될 수 있음
 
-  const Store({
+  // 새로 추가된 필드
+  final double? averageRating; // 평균 평점
+  final int? reviewCount;     // 리뷰 개수
+
+  Store({
     required this.id,
     required this.ownerId,
     required this.name,
@@ -88,15 +103,34 @@ class Store {
     this.openingHours,
     required this.status,
     required this.category,
+    this.mainImageUrl,
+    this.galleryImageUrls,
     required this.createdAt,
-    this.updatedAt,
+    required this.updatedAt,
+    this.menus,
+    this.reviews,
+    this.averageRating, // 생성자에 추가
+    this.reviewCount,   // 생성자에 추가
   });
 
   factory Store.fromJson(Map<String, dynamic> json) {
+    List<String>? galleryUrls;
+    if (json['galleryImageUrlsJson'] != null && (json['galleryImageUrlsJson'] as String).isNotEmpty) {
+      // 백엔드에서 galleryImageUrlsJson 필드로 JSON 문자열을 보내는 경우
+      // 실제로는 백엔드에서 List<String>으로 직접 보내주는 것이 더 일반적입니다.
+      // 여기서는 백엔드가 List<String> galleryImageUrls로 보내준다고 가정하고 수정합니다.
+      if (json['galleryImageUrls'] is List) {
+        galleryUrls = List<String>.from(json['galleryImageUrls']);
+      }
+    } else if (json['galleryImageUrls'] is List) { // galleryImageUrls 필드가 List 타입으로 직접 오는 경우
+      galleryUrls = List<String>.from(json['galleryImageUrls']);
+    }
+
+
     return Store(
       id: json['id'] as int,
-      ownerId: json['ownerId'] as String? ?? '', // ownerId가 null일 경우 대비
-      name: json['name'] as String? ?? '이름 없음', // name이 null일 경우 대비
+      ownerId: json['ownerId'] as String,
+      name: json['name'] as String,
       description: json['description'] as String?,
       address: json['address'] as String?,
       latitude: (json['latitude'] as num?)?.toDouble(),
@@ -105,16 +139,27 @@ class Store {
       openingHours: json['openingHours'] as String?,
       status: storeStatusFromString(json['status'] as String?),
       category: storeCategoryFromString(json['category'] as String?),
-      createdAt: DateTime.parse(json['createdAt'] as String? ?? DateTime.now().toIso8601String()), // createdAt이 null일 경우 대비
-      updatedAt: json['updatedAt'] == null ? null : DateTime.parse(json['updatedAt'] as String),
+      mainImageUrl: json['mainImageUrl'] as String?,
+      galleryImageUrls: galleryUrls,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      menus: (json['menus'] as List<dynamic>?)
+          ?.map((menuJson) => Menu.fromJson(menuJson as Map<String, dynamic>))
+          .toList(),
+      reviews: (json['reviews'] as List<dynamic>?)
+          ?.map((reviewJson) => Review.fromJson(reviewJson as Map<String, dynamic>))
+          .toList(),
+      averageRating: (json['averageRating'] as num?)?.toDouble(), // 파싱 로직 추가
+      reviewCount: json['reviewCount'] as int?,                 // 파싱 로직 추가
     );
   }
 
-  // 가게 생성 또는 수정 시 API 요청 본문으로 사용될 JSON 생성
   Map<String, dynamic> toJson() {
+    // toJson은 주로 클라이언트에서 서버로 데이터를 보낼 때 사용되므로,
+    // averageRating, reviewCount는 보통 포함하지 않습니다 (서버에서 계산).
     return {
-      // 'id': id, // 수정 시에는 id가 필요할 수 있으나, 생성 시에는 불필요
-      // 'ownerId': ownerId, // 서버에서 X-User-Id 헤더를 통해 설정
+      'id': id,
+      'ownerId': ownerId,
       'name': name,
       'description': description,
       'address': address,
@@ -124,107 +169,10 @@ class Store {
       'openingHours': openingHours,
       'status': storeStatusToString(status),
       'category': storeCategoryToString(category),
-      // createdAt, updatedAt은 서버에서 자동 관리
-    };
-  }
-}
-
-// 메뉴 정보를 담는 데이터 모델
-@immutable
-class Menu {
-  final int id;
-  final int storeId; // 이 메뉴가 속한 가게의 ID
-  final String name;
-  final String? description;
-  final double price; // BigDecimal은 Dart에서 double로 표현
-  final String? imageUrl; // 예: "/images/menu_image.jpg" (AppConfig.baseUrl과 조합 필요)
-  final bool isAvailable;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
-
-  const Menu({
-    required this.id,
-    required this.storeId,
-    required this.name,
-    this.description,
-    required this.price,
-    this.imageUrl,
-    required this.isAvailable,
-    required this.createdAt,
-    this.updatedAt,
-  });
-
-  factory Menu.fromJson(Map<String, dynamic> json) {
-    return Menu(
-      id: json['id'] as int,
-      storeId: json['storeId'] as int? ?? 0, // storeId가 null일 경우 대비
-      name: json['name'] as String? ?? '이름 없는 메뉴', // name이 null일 경우 대비
-      description: json['description'] as String?,
-      price: (json['price'] as num?)?.toDouble() ?? 0.0, // price가 null일 경우 대비
-      imageUrl: json['imageUrl'] as String?,
-      isAvailable: json['isAvailable'] as bool? ?? true, // 기본값 true
-      createdAt: DateTime.parse(json['createdAt'] as String? ?? DateTime.now().toIso8601String()),
-      updatedAt: json['updatedAt'] == null ? null : DateTime.parse(json['updatedAt'] as String),
-    );
-  }
-
-  // 메뉴 생성 또는 수정 시 API 요청 본문으로 사용될 JSON 생성
-  Map<String, dynamic> toJson() {
-    return {
-      // 'id': id, // 수정 시에는 id가 필요할 수 있으나, 생성 시에는 불필요
-      'storeId': storeId, // 메뉴가 어떤 가게에 속하는지 명시
-      'name': name,
-      'description': description,
-      'price': price,
-      // 'imageUrl': imageUrl, // 이미지 URL은 파일 업로드 후 서버에서 설정되거나 별도 관리
-      'isAvailable': isAvailable,
-      // createdAt, updatedAt은 서버에서 자동 관리
-    };
-  }
-}
-
-// 리뷰 정보를 담는 데이터 모델
-@immutable
-class Review {
-  final int id;
-  final int storeId; // 이 리뷰가 달린 가게의 ID
-  final String userId; // 리뷰 작성자의 사용자 ID
-  final int rating;    // 평점 (1~5)
-  final String? comment;
-  final DateTime createdAt;
-  final DateTime? updatedAt;
-
-  const Review({
-    required this.id,
-    required this.storeId,
-    required this.userId,
-    required this.rating,
-    this.comment,
-    required this.createdAt,
-    this.updatedAt,
-  });
-
-  factory Review.fromJson(Map<String, dynamic> json) {
-    return Review(
-      id: json['id'] as int,
-      storeId: json['storeId'] as int? ?? 0,
-      userId: json['userId'] as String? ?? '',
-      rating: json['rating'] as int? ?? 0,
-      comment: json['comment'] as String?,
-      createdAt: DateTime.parse(json['createdAt'] as String? ?? DateTime.now().toIso8601String()),
-      updatedAt: json['updatedAt'] == null ? null : DateTime.parse(json['updatedAt'] as String),
-    );
-  }
-
-  // 리뷰 생성 또는 수정 시 API 요청 본문으로 사용될 JSON 생성
-  Map<String, dynamic> toJson() {
-    return {
-      // 'id': id, // 수정 시에는 id가 필요할 수 있으나, 생성 시에는 불필요
-      'storeId': storeId, // 어떤 가게에 대한 리뷰인지 명시
-      // 'userId': userId, // 서버에서 X-User-Id 헤더를 통해 설정
-      'rating': rating,
-      'comment': comment,
-      // createdAt, updatedAt은 서버에서 자동 관리
+      'mainImageUrl': mainImageUrl,
+      'galleryImageUrls': galleryImageUrls, // List<String> 그대로 전송 (백엔드에서 처리)
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
     };
   }
 }

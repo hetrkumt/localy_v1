@@ -1,10 +1,13 @@
 // 파일 위치: lib/presentation/screens/auth/registration_screen.dart
 import 'package:flutter/material.dart';
-import '../../../data/models/auth_models.dart'; // UserRegistrationRequest 모델 import
-import '../../../data/services/auth_api_service.dart'; // 인증 API 서비스 import
+import 'package:localy_front_flutter/data/models/auth_models.dart';
+import 'package:localy_front_flutter/presentation/providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import 'package:localy_front_flutter/presentation/screens/home/home_screen.dart';
+
 
 class RegistrationScreen extends StatefulWidget {
-  static const String routeName = '/register'; // 명명된 라우트 사용 시
+  static const String routeName = '/register';
   const RegistrationScreen({super.key});
 
   @override
@@ -23,7 +26,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _isLoading = false;
   String? _errorMessage;
 
-  final AuthApiService _authApiService = AuthApiService();
+  // AuthApiService 직접 인스턴스화 제거
+  // final AuthApiService _authApiService = AuthApiService();
 
   Future<void> _performRegistration() async {
     if (!_formKey.currentState!.validate()) {
@@ -41,6 +45,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       _errorMessage = null;
     });
 
+    // AuthProvider 가져오기
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
     try {
       final registrationRequest = UserRegistrationRequest(
         username: _usernameController.text.trim(),
@@ -49,22 +56,48 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         firstName: _firstNameController.text.trim().isEmpty ? null : _firstNameController.text.trim(),
         lastName: _lastNameController.text.trim().isEmpty ? null : _lastNameController.text.trim(),
       );
-      await _authApiService.register(registrationRequest);
-      debugPrint('회원가입 API 호출 성공!');
 
-      if (mounted) {
+      // AuthProvider의 register 메서드 호출
+      // AuthProvider의 register 메서드는 내부적으로 회원가입 후 자동 로그인을 시도합니다.
+      await authProvider.register(registrationRequest);
+      debugPrint('회원가입 및 자동 로그인 시도 완료!');
+
+      if (mounted && authProvider.isAuthenticated) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('회원가입 성공! 로그인 페이지로 이동합니다.'),
+            content: Text('회원가입 및 자동 로그인 성공! 홈 화면으로 이동합니다.'),
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pop();
+        // 회원가입 및 자동 로그인 성공 시 홈 화면으로 바로 이동
+        Navigator.of(context).pushNamedAndRemoveUntil(HomeScreen.routeName, (route) => false);
+      } else if (mounted) {
+        // 회원가입은 성공했으나 자동 로그인이 실패한 경우 (예: register 메서드 내 login 호출 실패)
+        // 또는 register 메서드가 예외를 던지지 않고 실패를 나타내는 경우
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('회원가입은 성공했지만, 자동 로그인에 실패했습니다. 로그인 페이지로 이동합니다.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        Navigator.of(context).pop(); // 현재 회원가입 화면을 닫고 로그인 화면으로 돌아감
       }
     } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll("Exception: ", "");
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = e.toString().replaceAll("Exception: ", "");
+          if (_errorMessage!.toLowerCase().contains("failed host lookup") || _errorMessage!.toLowerCase().contains("connection refused")) {
+            _errorMessage = "서버에 연결할 수 없습니다. 네트워크 상태를 확인해주세요.";
+          } else if (_errorMessage!.toLowerCase().contains("user exists with same username") || _errorMessage!.toLowerCase().contains("username already exists")) {
+            _errorMessage = "이미 사용 중인 사용자명입니다.";
+          } else if (_errorMessage!.toLowerCase().contains("user exists with same email") || _errorMessage!.toLowerCase().contains("email already exists")) {
+            _errorMessage = "이미 사용 중인 이메일입니다.";
+          } else {
+            _errorMessage = "회원가입 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+            debugPrint('회원가입 API 호출 실패 원본: $e');
+          }
+        });
+      }
       debugPrint('회원가입 API 호출 실패: $e');
     } finally {
       if (mounted) {

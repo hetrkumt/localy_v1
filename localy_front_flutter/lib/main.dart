@@ -1,47 +1,72 @@
 // 파일 위치: lib/main.dart
 import 'package:flutter/material.dart';
-import 'package:flutter_naver_map/flutter_naver_map.dart'; // 네이버 지도 패키지
-import 'core/config/app_config.dart'; // 앱 설정 파일 import
-import 'presentation/screens/auth/login_screen.dart'; // 로그인 화면 import
-// import 'presentation/screens/home/home_screen.dart'; // (선택) 로그인 성공 후 보여줄 홈 화면
-// import 'data/services/auth_api_service.dart'; // (선택) 앱 시작 시 토큰 확인용
+import 'package:flutter_naver_map/flutter_naver_map.dart';
+import 'package:localy_front_flutter/core/config/app_config.dart';
+import 'package:localy_front_flutter/presentation/providers/auth_provider.dart';
+import 'package:localy_front_flutter/presentation/providers/cart_provider.dart';
+import 'package:localy_front_flutter/presentation/providers/store_provider.dart';
+import 'package:localy_front_flutter/presentation/providers/order_provider.dart';
+import 'package:localy_front_flutter/presentation/providers/review_provider.dart'; // ReviewProvider 임포트
+import 'package:localy_front_flutter/presentation/screens/auth/login_screen.dart';
+import 'package:localy_front_flutter/presentation/screens/home/home_screen.dart';
+import 'package:localy_front_flutter/data/services/auth_api_service.dart';
+import 'package:provider/provider.dart';
+import 'package:localy_front_flutter/presentation/screens/cart/cart_screen.dart';
+import 'package:localy_front_flutter/presentation/screens/order/order_list_screen.dart';
+import 'package:localy_front_flutter/presentation/screens/store/store_detail_screen.dart';
 
 void main() async {
-  // Flutter 앱이 실행되기 전에 Flutter 엔진과 위젯 바인딩이 초기화되었는지 확인합니다.
-  // 네이티브 플러그인(예: flutter_naver_map)을 사용하기 전에 필수입니다.
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 네이버 지도 SDK 초기화
-  // 앱 실행 시 한 번만 수행하면 됩니다.
   await FlutterNaverMap().init(
-    clientId: AppConfig.naverMapClientId, // AppConfig에서 클라이언트 ID 사용
+    clientId: AppConfig.naverMapClientId,
     onAuthFailed: (ex) {
-      // 인증 실패 시 콘솔에 에러를 출력합니다.
-      // 실제 앱에서는 사용자에게 알림을 주거나 다른 적절한 처리를 할 수 있습니다.
       debugPrint("********* 네이버맵 인증오류 : $ex *********");
     },
   );
 
-  // (선택 사항) 앱 시작 시 저장된 인증 토큰을 확인하여
-  // 로그인 상태에 따라 초기 화면을 다르게 보여줄 수 있습니다.
-  // final authService = AuthApiService(); // 실제로는 의존성 주입(DI) 사용 고려
-  // final bool isLoggedIn = await authService.isUserLoggedIn();
-  // final Widget initialScreen = isLoggedIn ? const HomeScreen() : const LoginScreen();
+  final AuthApiService authApiService = AuthApiService();
+  final AuthProvider authProvider = AuthProvider(authApiService);
+  await authProvider.tryAutoLogin();
 
-  runApp(const MyApp(
-    // initialScreen: initialScreen, // (선택 사항) 위 로직 사용 시
-  ));
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: authProvider),
+        ChangeNotifierProxyProvider<AuthProvider, CartProvider>(
+            create: (context) => CartProvider(authProvider),
+            update: (context, auth, previousCartProvider) {
+              previousCartProvider?.update(auth);
+              return previousCartProvider ?? CartProvider(auth);
+            }
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, StoreProvider>(
+          create: (context) => StoreProvider(authProvider),
+          update: (context, auth, previousStoreProvider) => previousStoreProvider ?? StoreProvider(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthProvider, OrderProvider>(
+          create: (context) => OrderProvider(authProvider),
+          update: (context, auth, previousOrderProvider) => previousOrderProvider ?? OrderProvider(auth),
+        ),
+        // ReviewProvider 등록
+        ChangeNotifierProxyProvider<AuthProvider, ReviewProvider>(
+          create: (context) => ReviewProvider(authProvider), // AuthProvider를 ReviewProvider에 전달
+          update: (context, auth, previousReviewProvider) => previousReviewProvider ?? ReviewProvider(auth),
+        ),
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
-  // final Widget initialScreen; // (선택 사항) 초기 화면을 외부에서 주입받을 경우
-
-  const MyApp({super.key /*, required this.initialScreen */});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+
     return MaterialApp(
-      title: 'Localy', // 앱의 제목
+      title: 'Localy',
       theme: ThemeData(
         primarySwatch: Colors.teal,
         scaffoldBackgroundColor: Colors.grey[50],
@@ -88,12 +113,28 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       debugShowCheckedModeBanner: false,
-      home: const LoginScreen(), // 초기 화면을 로그인 화면으로 설정
-      // routes: {
-      //   '/': (context) => initialScreen,
-      //   LoginScreen.routeName: (context) => const LoginScreen(),
-      //   HomeScreen.routeName: (context) => const HomeScreen(),
-      // },
+      home: authProvider.isAuthenticated
+          ? const HomeScreen()
+          : const LoginScreen(),
+      routes: {
+        LoginScreen.routeName: (context) => const LoginScreen(),
+        HomeScreen.routeName: (context) => const HomeScreen(),
+        CartScreen.routeName: (context) => const CartScreen(),
+        OrderListScreen.routeName: (context) => const OrderListScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == StoreDetailScreen.routeName) {
+          final args = settings.arguments;
+          if (args is int) {
+            return MaterialPageRoute(
+              builder: (context) {
+                return StoreDetailScreen(storeId: args);
+              },
+            );
+          }
+        }
+        return null;
+      },
     );
   }
 }

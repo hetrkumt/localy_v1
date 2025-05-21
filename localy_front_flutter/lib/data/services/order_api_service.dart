@@ -1,51 +1,127 @@
 // 파일 위치: lib/data/services/order_api_service.dart
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../models/order_models.dart'; // 주문 관련 데이터 모델 import
-import 'api_client.dart';           // 공통 API 클라이언트 import
+import 'package:localy_front_flutter/data/models/order_models.dart';
+import 'package:localy_front_flutter/data/services/api_client.dart';
+import 'package:localy_front_flutter/core/config/app_config.dart';
+
+// UriBuilder 헬퍼 클래스 정의
+// 다른 파일 (예: store_api_service.dart 또는 별도 유틸리티 파일)에 이미 정의되어 있다면,
+// 이 부분을 삭제하고 해당 파일을 import 하세요.
+// 여기서는 이 파일 내에 직접 정의합니다.
+class UriBuilder {
+  String scheme;
+  String host;
+  int? port;
+  String path;
+  Map<String, String>? queryParams;
+
+  UriBuilder({
+    required this.scheme,
+    required this.host,
+    this.port,
+    required this.path,
+    this.queryParams,
+  });
+
+  Uri build() {
+    return Uri(
+      scheme: scheme,
+      host: host,
+      port: port,
+      path: path,
+      queryParameters: queryParams,
+    );
+  }
+}
 
 class OrderApiService {
-  final ApiClient _apiClient;
+  final ApiClient apiClient;
 
-  OrderApiService({ApiClient? apiClient}) : _apiClient = apiClient ?? ApiClient();
+  OrderApiService({required this.apiClient});
 
-  // 새로운 주문 생성 (인증 필요)
-  Future<Order> placeOrder(CreateOrderRequest orderRequest) async {
+  Future<List<Order>> fetchUserOrders({int page = 0, int size = 20}) async {
+    // UriBuilder 클래스를 사용하여 URI 생성
+    final UriBuilder uriBuilder = UriBuilder(
+      scheme: Uri.parse(AppConfig.baseUrl).scheme,
+      host: Uri.parse(AppConfig.baseUrl).host,
+      port: Uri.parse(AppConfig.baseUrl).port,
+      path: '${Uri.parse(AppConfig.baseUrl).path}/orders', // AppConfig.baseUrl에 /api가 포함되어 있다고 가정
+    );
+    uriBuilder.queryParams = {
+      'page': page.toString(),
+      'size': size.toString(),
+    };
+    final Uri uri = uriBuilder.build();
+    debugPrint('--- OrderApiService: Fetching user orders from URL: $uri ---');
+
     try {
-      // CreateOrderRequest 모델의 toJson()은 userId를 포함하지 않도록 수정되었거나,
-      // 서버에서 요청 본문의 userId를 무시하고 X-User-Id 헤더를 사용해야 합니다.
-      final response = await _apiClient.post('/orders', orderRequest.toJson());
-      final Map<String, dynamic> responseData = _apiClient.processResponse(response, expectFullJsonResponse: true);
-      debugPrint("OrderApiService: 주문 생성 성공, 주문 ID: ${responseData['orderId']}");
-      return Order.fromJson(responseData);
+      final response = await apiClient.get(uri.toString());
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = json.decode(utf8.decode(response.bodyBytes));
+        List<Order> orders = responseData.map((data) => Order.fromJson(data)).toList();
+        debugPrint('--- OrderApiService: Fetched ${orders.length} orders ---');
+        return orders;
+      } else {
+        debugPrint('--- OrderApiService: Failed to load orders. Status: ${response.statusCode}, Body: ${response.body}');
+        throw Exception('Failed to load orders: ${response.statusCode}');
+      }
     } catch (e) {
-      debugPrint("OrderApiService: 주문 생성 실패 - $e");
-      throw Exception("주문을 생성하는데 실패했습니다. 장바구니 상태를 확인해주세요.");
+      debugPrint('--- OrderApiService: Error fetching orders: $e ---');
+      rethrow;
     }
   }
 
-// TODO: 주문 목록 조회 API (백엔드에 해당 API가 있다면 추가)
-// 예시:
-// Future<List<Order>> getMyOrders() async {
-//   try {
-//     final response = await _apiClient.get('/orders'); // 실제 엔드포인트 확인 필요
-//     final List<dynamic> responseData = _apiClient.processResponse(response);
-//     return responseData.map((json) => Order.fromJson(json)).toList();
-//   } catch (e) {
-//     debugPrint("OrderApiService: 내 주문 목록 조회 실패 - $e");
-//     throw Exception("주문 내역을 가져오는데 실패했습니다.");
-//   }
-// }
+  Future<Order?> fetchOrderDetail(int orderId) async {
+    // AppConfig.baseUrl에 /api가 포함되어 있다고 가정
+    final String url = '${AppConfig.baseUrl}/orders/$orderId';
+    debugPrint('--- OrderApiService: Fetching order detail from URL: $url ---');
+    try {
+      final response = await apiClient.get(url);
+      if (response.statusCode == 200) {
+        return Order.fromJson(json.decode(utf8.decode(response.bodyBytes)));
+      } else if (response.statusCode == 404) {
+        return null; // 주문을 찾을 수 없음
+      } else {
+        throw Exception('Failed to load order detail: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('--- OrderApiService: Error fetching order detail: $e ---');
+      rethrow;
+    }
+  }
 
-// TODO: 특정 주문 상세 조회 API (백엔드에 해당 API가 있다면 추가)
-// 예시:
-// Future<Order> getOrderDetails(int orderId) async {
-//   try {
-//     final response = await _apiClient.get('/orders/$orderId'); // 실제 엔드포인트 확인 필요
-//     final Map<String, dynamic> responseData = _apiClient.processResponse(response);
-//     return Order.fromJson(responseData);
-//   } catch (e) {
-//     debugPrint("OrderApiService: 주문 상세 조회 실패 (OrderID: $orderId) - $e");
-//     throw Exception("주문 상세 정보를 가져오는데 실패했습니다.");
-//   }
-// }
+  Future<Order> createOrder(Map<String, dynamic> orderData) async {
+    debugPrint("OrderApiService: createOrder 호출 - Data: $orderData");
+    try {
+      // AppConfig.baseUrl에 /api가 포함되어 있다고 가정
+      final response = await apiClient.post(
+        '/orders', // ApiClient 내부에서 AppConfig.baseUrl과 합쳐짐
+        orderData,
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        final responseBody = json.decode(utf8.decode(response.bodyBytes));
+        debugPrint("OrderApiService: Order created successfully - Response: $responseBody");
+        return Order.fromJson(responseBody);
+      } else {
+        debugPrint('OrderApiService: Failed to create order - Status: ${response.statusCode}, Body: ${response.body}');
+        String errorMessage = "주문 생성에 실패했습니다.";
+        try {
+          final errorBody = json.decode(utf8.decode(response.bodyBytes));
+          if (errorBody['message'] != null) {
+            errorMessage = errorBody['message'];
+          } else if (errorBody['error'] != null) {
+            errorMessage = errorBody['error'];
+          }
+        } catch (_) {
+          // 오류 메시지 파싱 실패 시 기본 메시지 사용
+        }
+        throw Exception(errorMessage);
+      }
+    } catch (e) {
+      debugPrint('OrderApiService: createOrder 중 예외 발생 - $e');
+      rethrow;
+    }
+  }
 }
