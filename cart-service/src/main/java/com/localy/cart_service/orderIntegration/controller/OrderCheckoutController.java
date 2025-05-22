@@ -21,7 +21,7 @@ public class OrderCheckoutController {
     private final CartService cartService;
     private final OrderCheckoutService orderCheckoutService;
     @PostMapping("/checkout")
-    public ResponseEntity<String> checkout(@RequestHeader("X-User-Id") String userId) {
+    public ResponseEntity<CheckoutResult> checkout(@RequestHeader("X-User-Id") String userId) {
         // 서비스 메서드 호출 결과를 CheckoutResult 객체로 받음
         CheckoutResult result = orderCheckoutService.checkout(userId);
 
@@ -29,7 +29,7 @@ public class OrderCheckoutController {
         if (result.isSuccess()) {
             // 주문 요청 성공 시: 장바구니 비우고 주문 ID와 200 OK 반환
             cartService.clearCart(userId); // 장바구니 비우기는 성공 시에만 수행
-            return new ResponseEntity<>(result.getOrderId(), HttpStatus.OK); // 주문 ID를 응답 본문에 담아 반환
+            return new ResponseEntity<>(result, HttpStatus.OK); // 주문 ID를 응답 본문에 담아 반환
         } else {
             // 주문 요청 실패 시: 실패 원인 메시지와 적절한 상태 코드 반환
             HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR; // 기본 상태는 서버 오류 (통합 실패 등)
@@ -41,7 +41,7 @@ public class OrderCheckoutController {
             }
 
             // 실패 메시지와 적절한 상태 코드를 함께 반환
-            return new ResponseEntity<>(errorMessage, status);
+            return new ResponseEntity<>(result, status);
         }
     }
 }

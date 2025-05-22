@@ -1,6 +1,9 @@
+// 파일 위치: com.localy.store_service.review.controller.ReviewController.java
 package com.localy.store_service.review.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper; // ObjectMapper 임포트
 import com.localy.store_service.review.domain.Review;
+// import com.localy.store_service.review.dto.ReviewRequestDto; // DTO 임포트 제거
 import com.localy.store_service.review.service.ReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -13,7 +16,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.NoSuchElementException;
-import java.util.Arrays; // 스택 트레이스 로깅용
 
 @RestController
 @RequestMapping("/api/reviews")
@@ -21,6 +23,7 @@ import java.util.Arrays; // 스택 트레이스 로깅용
 public class ReviewController {
 
     private final ReviewService reviewService;
+    private final ObjectMapper objectMapper; // JSON 수동 파싱을 위해 ObjectMapper 주입
 
     private Mono<String> getUserIdFromHeaders(ServerWebExchange exchange) {
         String userId = exchange.getRequest().getHeaders().getFirst("X-User-Id");
@@ -35,7 +38,7 @@ public class ReviewController {
         return reviewService.findReviewById(reviewId)
                 .map(ResponseEntity::ok)
                 .onErrorResume(NoSuchElementException.class, e -> Mono.just(ResponseEntity.notFound().build()))
-                .onErrorResume(e -> handleControllerError(e, "리뷰 조회", false));
+                .onErrorResume(e -> handleControllerError(e, "리뷰 조회 (ID)", false));
     }
 
     @GetMapping("/stores/{storeId}/reviews")
@@ -52,19 +55,43 @@ public class ReviewController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Review>> submitReview(
-            @RequestPart("review") Mono<Review> reviewMono, // 리뷰 정보 JSON
-            @RequestPart(value = "image", required = false) Mono<FilePart> imageFileMono, // 리뷰 이미지 파일 (선택)
+            @RequestPart("review") String reviewJsonString, // JSON 문자열로 받음
+            @RequestPart(value = "image", required = false) Mono<FilePart> imageFileMono,
             ServerWebExchange exchange) {
         System.out.println("--- ReviewController: POST /api/reviews (Multipart) 요청 수신 ---");
+        System.out.println("--- ReviewController: Received reviewJsonString: " + reviewJsonString + " ---");
+
         return getUserIdFromHeaders(exchange)
-                .flatMap(userId -> reviewMono
-                        .flatMap(review -> {
-                            review.setUserId(userId); // 서비스에서 설정하기보다 컨트롤러에서 명확히 설정
-                            if (review.getStoreId() == null) { // storeId는 필수
-                                return Mono.error(new IllegalArgumentException("Store ID is required for a review."));
-                            }
-                            return reviewService.submitReview(review, imageFileMono);
-                        }))
+                .flatMap(userId -> {
+                    try {
+                        // JSON 문자열을 Review 도메인 객체로 직접 변환
+                        Review reviewFromRequest = objectMapper.readValue(reviewJsonString, Review.class);
+
+                        // 헤더에서 받은 userId로 Review 객체의 userId 설정 (클라이언트가 보낸 값 덮어쓰기 또는 설정)
+                        reviewFromRequest.setUserId(userId);
+                        // storeId는 클라이언트가 JSON에 포함해서 보내야 함
+                        if (reviewFromRequest.getStoreId() == null) {
+                            return Mono.error(new IllegalArgumentException("storeId is required in review data."));
+                        }
+                        // rating도 클라이언트가 JSON에 포함해서 보내야 함
+                        if (reviewFromRequest.getRating() == null) {
+                            return Mono.error(new IllegalArgumentException("rating is required in review data."));
+                        }
+                        // comment는 선택 사항
+
+                        // createdAt, updatedAt, id 등은 서비스 또는 DB에서 자동 설정되므로 여기서는 설정하지 않음
+                        // reviewFromRequest.setCreatedAt(null); // 명시적으로 null 처리하여 자동 생성 유도
+                        // reviewFromRequest.setUpdatedAt(null);
+                        // reviewFromRequest.setId(null);
+
+
+                        System.out.println("--- ReviewController: Parsed Review object: " + reviewFromRequest.toString() + " ---");
+                        return reviewService.submitReview(reviewFromRequest, imageFileMono);
+                    } catch (Exception e) {
+                        System.err.println("--- ReviewController: Error parsing review JSON string: " + e.getMessage() + " ---");
+                        return Mono.error(new IllegalArgumentException("Invalid review data format.", e));
+                    }
+                })
                 .map(savedReview -> ResponseEntity.status(HttpStatus.CREATED).body(savedReview))
                 .onErrorResume(e -> handleControllerError(e, "리뷰 생성", false));
     }
@@ -72,46 +99,61 @@ public class ReviewController {
     @PutMapping(value = "/{reviewId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Mono<ResponseEntity<Review>> updateReview(
             @PathVariable Long reviewId,
-            @RequestPart("review") Mono<Review> reviewMono, // 수정할 리뷰 정보 JSON
-            @RequestPart(value = "image", required = false) Mono<FilePart> newImageFileMono, // 새 리뷰 이미지 파일 (선택)
+            @RequestPart("review") String reviewJsonString, // JSON 문자열로 받음
+            @RequestPart(value = "image", required = false) Mono<FilePart> newImageFileMono,
             ServerWebExchange exchange) {
         System.out.println("--- ReviewController: PUT /api/reviews/" + reviewId + " (Multipart) 요청 수신 ---");
         return getUserIdFromHeaders(exchange)
-                .flatMap(userId -> reviewMono
-                        .flatMap(reviewData -> reviewService.updateReview(reviewId, reviewData, userId, newImageFileMono)))
+                .flatMap(userId -> {
+                    try {
+                        // JSON 문자열을 Review 도메인 객체로 직접 변환
+                        Review reviewUpdates = objectMapper.readValue(reviewJsonString, Review.class);
+
+                        // 서비스 계층에 전달할 때는 변경 가능한 필드(rating, comment)만 가진 새 객체를 만들거나,
+                        // 서비스 계층에서 기존 엔티티를 로드한 후 필요한 필드만 업데이트하도록 할 수 있습니다.
+                        // 여기서는 클라이언트가 보낸 값을 그대로 사용하되, 서비스에서 필요한 필드만 업데이트한다고 가정합니다.
+                        // (주의: storeId, userId 등은 이 요청으로 변경되어서는 안 됨)
+                        // reviewUpdates.setStoreId(null); // 변경 불가 필드는 null로 설정하여 Jackson이 무시하도록 유도 가능 (설정에 따라)
+                        // reviewUpdates.setUserId(null);
+
+                        System.out.println("--- ReviewController: Parsed Review updates: " + reviewUpdates.toString() + " ---");
+                        return reviewService.updateReview(reviewId, reviewUpdates, userId, newImageFileMono);
+                    } catch (Exception e) {
+                        System.err.println("--- ReviewController: Error parsing review JSON string for update: " + e.getMessage() + " ---");
+                        return Mono.error(new IllegalArgumentException("Invalid review data format for update.", e));
+                    }
+                })
                 .map(ResponseEntity::ok)
                 .onErrorResume(e -> handleControllerError(e, "리뷰 수정", false));
     }
 
     @DeleteMapping("/{reviewId}")
     public Mono<ResponseEntity<Object>> deleteReview(@PathVariable Long reviewId, ServerWebExchange exchange) {
+        // ... (이전과 동일)
         System.out.println("--- ReviewController: DELETE /api/reviews/" + reviewId + " 요청 수신 ---");
         return getUserIdFromHeaders(exchange)
                 .flatMap(userId -> reviewService.deleteReview(reviewId, userId))
-                .then(Mono.just(ResponseEntity.noContent().<Object>build())) // 타입 명시
+                .then(Mono.just(ResponseEntity.noContent().<Object>build()))
                 .onErrorResume(e -> handleControllerError(e, "리뷰 삭제", true));
     }
 
-    // 공통 오류 처리 헬퍼
     private <T> Mono<ResponseEntity<T>> handleControllerError(Throwable e, String action, boolean isDeleteOperation) {
+        // ... (이전과 동일)
         System.err.println("--- ReviewController: " + action + " 중 오류 발생 - " + e.getMessage() + " --- 예외 타입: " + e.getClass().getName() + " ---");
-        // System.err.println("--- Stack Trace: " + Arrays.toString(e.getStackTrace()) + " ---"); // 필요시 스택 트레이스 로깅
-
         HttpStatus status;
         if (e instanceof NoSuchElementException) {
             status = HttpStatus.NOT_FOUND;
         } else if (e instanceof SecurityException) {
-            status = HttpStatus.FORBIDDEN; // 또는 UNAUTHORIZED
+            status = HttpStatus.FORBIDDEN;
         } else if (e instanceof IllegalArgumentException) {
             status = HttpStatus.BAD_REQUEST;
         } else {
             status = HttpStatus.INTERNAL_SERVER_ERROR;
         }
 
-        if (isDeleteOperation && status == HttpStatus.NO_CONTENT) { // delete 성공 시 then에서 처리되므로 여기까지 오면 오류
-            return Mono.just(ResponseEntity.status(status).build());
+        if (isDeleteOperation) {
+            return Mono.just(ResponseEntity.status(status).<T>build());
         }
-        // body(null)을 사용하기 위해 제네릭 타입 T를 명시적으로 캐스팅하거나, build() 사용
         return Mono.just(ResponseEntity.status(status).<T>body(null));
     }
 }

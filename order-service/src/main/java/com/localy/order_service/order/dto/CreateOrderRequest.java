@@ -8,7 +8,7 @@ import java.util.List;
 @Getter
 @Setter
 public class CreateOrderRequest {
-    private String userId;
-    private String storeId;
+    //private String userId;
+    private Long storeId;
     private List<CartItemDto> cartItems;
 }

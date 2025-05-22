@@ -11,5 +11,5 @@ public class AddItemRequest {
     private String menuName;
     private Integer quantity;
     private BigDecimal unitPrice;
-    private String storeId;
+    private Long storeId;
 }

@@ -1,5 +1,7 @@
 // 파일 위치: lib/data/models/cart_models.dart
 import 'package:flutter/foundation.dart';
+import 'dart:convert'; // jsonDecode 사용
+import 'package:localy_front_flutter/data/models/order_models.dart'; // Order 모델 임포트
 
 // CartItem 모델 (변경 없음)
 class CartItem {
@@ -34,10 +36,10 @@ class CartItem {
   }
 }
 
-// 장바구니 모델
+// Cart 모델 (변경 없음 - 이전 flutter_cart_models_v6_storeid_long_final 버전 사용)
 class Cart {
   final String userId;
-  final int? currentStoreId; // Flutter에서는 int?, 백엔드 Cart 도메인은 String storeId
+  final int? currentStoreId;
   final Map<String, CartItem> items;
 
   Cart({
@@ -60,13 +62,11 @@ class Cart {
 
   Map<String, dynamic> toJson() => {
     'userId': userId,
-    // currentStoreId를 String으로 변환하여 전송 (백엔드 Cart 도메인의 storeId가 String이므로)
-    'storeId': currentStoreId?.toString(), // 필드명을 'storeId'로 변경하고 String으로 변환
-    'cartItems': items.map((key, value) => MapEntry(key, value.toJson())), // 필드명을 'cartItems'로 변경
+    'storeId': currentStoreId,
+    'cartItems': items.map((key, value) => MapEntry(key, value.toJson())),
   };
 
   factory Cart.fromJson(Map<String, dynamic> json) {
-    // 백엔드 응답의 "cartItems" 키를 사용하여 아이템 맵 파싱
     var itemsMapFromJson = json['cartItems'] as Map<String, dynamic>?;
     Map<String, CartItem> parsedItems = {};
     if (itemsMapFromJson != null) {
@@ -75,25 +75,25 @@ class Cart {
     }
 
     int? storeIdAsInt;
-    if (json['storeId'] != null) { // 백엔드 Cart 도메인의 필드명은 'storeId' (String 타입)
-      storeIdAsInt = int.tryParse(json['storeId'].toString());
+    if (json['storeId'] != null) {
+      storeIdAsInt = (json['storeId'] as num?)?.toInt();
     }
 
     return Cart(
-      userId: json['userId'] as String,
-      currentStoreId: storeIdAsInt, // 파싱된 int? 값 사용
+      userId: json['userId'] as String? ?? '',
+      currentStoreId: storeIdAsInt,
       items: parsedItems,
     );
   }
 }
 
-// AddItemToCartRequest (storeId를 String으로 보내도록 toJson 수정)
+// AddItemToCartRequest (변경 없음 - 이전 flutter_cart_models_v6_storeid_long_final 버전 사용)
 class AddItemToCartRequest {
   final String menuId;
   final String menuName;
   final int quantity;
   final double unitPrice;
-  final int storeId; // Flutter에서는 int로 관리
+  final int storeId;
 
   AddItemToCartRequest({
     required this.menuId,
@@ -108,7 +108,7 @@ class AddItemToCartRequest {
     'menuName': menuName,
     'quantity': quantity,
     'unitPrice': unitPrice,
-    'storeId': storeId.toString(), // 백엔드 AddItemRequest는 String storeId를 기대
+    'storeId': storeId,
   };
 }
 
@@ -149,9 +149,9 @@ class CartItemDtoForOrder {
   }
 }
 
-// CreateOrderRequestDtoForFlutter (storeId를 String으로 보내도록 toJson 수정)
+// CreateOrderRequestDtoForFlutter (변경 없음 - 이전 flutter_cart_models_v6_storeid_long_final 버전 사용)
 class CreateOrderRequestDtoForFlutter {
-  final String storeId; // 백엔드 CreateOrderRequest는 String storeId
+  final int storeId;
   final List<CartItemDtoForOrder> cartItems;
 
   CreateOrderRequestDtoForFlutter({
@@ -161,25 +161,40 @@ class CreateOrderRequestDtoForFlutter {
 
   Map<String, dynamic> toJson() {
     return {
-      'storeId': storeId, // String 타입 그대로 사용
+      'storeId': storeId,
       'cartItems': cartItems.map((item) => item.toJsonForCartItemDto()).toList(),
     };
   }
 }
 
-// CheckoutResult (변경 없음)
+// CheckoutResult 모델 수정
 class CheckoutResult {
   final bool success;
   final String? errorMessage;
-  final int? orderId;
+  final Order? createdOrder; // String? orderId 대신 Order? createdOrder로 변경
 
-  CheckoutResult({required this.success, this.errorMessage, this.orderId});
+  CheckoutResult({
+    required this.success,
+    this.errorMessage,
+    this.createdOrder, // 생성자 변경
+  });
 
   factory CheckoutResult.fromJson(Map<String, dynamic> json) {
+    Order? order;
+    // 백엔드 cart-service가 "createdOrderJson" 키로 Order 객체의 JSON 문자열을 반환한다고 가정
+    if (json['success'] == true && json['createdOrderJson'] != null && json['createdOrderJson'] is String) {
+      try {
+        // JSON 문자열을 Map<String, dynamic>으로 디코딩 후 Order.fromJson 호출
+        order = Order.fromJson(jsonDecode(json['createdOrderJson'] as String) as Map<String, dynamic>);
+      } catch (e) {
+        debugPrint("CheckoutResult.fromJson: Error parsing createdOrderJson: $e");
+        // 파싱 실패 시 order는 null로 유지
+      }
+    }
     return CheckoutResult(
-      success: json['success'] as bool? ?? (json['orderId'] != null && json['orderId'] > 0),
-      errorMessage: json['errorMessage'] as String? ?? json['message'] as String?,
-      orderId: json['orderId'] as int?,
+      success: json['success'] as bool? ?? false, // success 필드가 없다면 false로 간주
+      errorMessage: json['errorMessage'] as String?,
+      createdOrder: order,
     );
   }
 }

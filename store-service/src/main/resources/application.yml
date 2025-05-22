@@ -32,7 +32,6 @@ spring:
       enabled: true # 스키마 및 데이터 스크립트 실행 활성화
       platform: postgresql # 사용할 DB 플랫폼 지정
       schema-locations: classpath:schema.sql # 스키마 스크립트 파일 경로 (src/main/resources/schema.sql)
-      data-locations: classpath:data.sql # 데이터 스크립트 파일 경로 (src/main/resources/data.sql)
       continue-on-error: false # 스크립트 실행 중 오류 발생 시 중단 여부
       mode: always
 

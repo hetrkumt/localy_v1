@@ -1,0 +1,81 @@
+# 주문 서비스 application.yml
+
+server:
+  port: 8091
+
+spring:
+  application:
+    name: order-service
+  r2dbc:
+    # Docker Compose의 PostgreSQL 서비스 이름(localy-store-postgre)과 내부 포트(5432)를 사용하거나,
+    # 로컬에서 직접 실행 시 호스트에 매핑된 포트(5434)를 사용합니다.
+    # 환경 변수 우선 사용, 없을 경우 기본값 사용.
+    # Docker 컨테이너 간 통신 시: r2dbc:postgresql://localy-store-postgre:5432/storedb
+    # 로컬 개발 환경에서 Docker DB 접근 시: r2dbc:postgresql://localhost:5434/storedb (docker-compose.yml의 포트 매핑 5434:5432 기준)
+    url: ${SPRING_R2DBC_URL:r2dbc:postgresql://localhost:5432/orderdb}
+    username: ${SPRING_R2DBC_USERNAME:orderuser}   # docker-compose.yml의 POSTGRES_USER 값
+    password: ${SPRING_R2DBC_PASSWORD:orderpass} # docker-compose.yml의 POSTGRES_PASSWORD 값
+    pool:
+      enabled: true
+      initial-size: 5
+      max-size: 10
+      # validation-query: SELECT 1 # 필요시 유효성 검사 쿼리 추가
+
+  # --- 기존 JPA 설정 주석 처리 또는 삭제 ---
+  # jpa:
+  #   hibernate:
+  #     ddl-auto: update
+  #   show-sql: true
+  #   properties:
+  #     hibernate:
+  #       format_sql: true
+
+  # --- SQL 초기화 스크립트 설정 (R2DBC에서도 동일하게 사용 가능) ---
+  sql:
+    init:
+      enabled: true
+      platform: postgresql # R2DBC도 이 플랫폼 지정 사용 가능
+      schema-locations: classpath:all-in-one-init.sql # 스키마와 데이터를 포함한 단일 파일 사용 권장
+      # data-locations: # schema-locations에 모든 것을 포함했다면 비워둠
+      continue-on-error: false
+      mode: always # 개발 중에는 always, 운영에서는 embedded 또는 never
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
+  cloud:
+    stream:
+      kafka:
+        binder:
+          brokers: ${spring.kafka.bootstrap-servers}
+      bindings:
+        orderCreatedProducer-out-0:
+          destination: order-created
+          contentType: application/json
+        paymentResultConsumer-in-0:
+          destination: payment-result
+          group: order-payment-result-group
+          consumer:
+            configuration:
+              auto.offset.reset: earliest
+              key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+              # value.deserializer: org.springframework.kafka.support.serializer.JsonSerializer # Spring Kafka의 JsonSerializer 사용 시
+              # spring.json.trusted.packages: com.localy.payment_service.payment.message.dto # 역직렬화 대상 패키지
+              # Spring Cloud Stream에서는 보통 메시지 컨버터를 통해 처리하므로,
+              # value.deserializer는 바인더 기본값이나 contentType에 맞는 컨버터가 처리하도록 둘 수 있습니다.
+              # 만약 특정 역직렬화기를 사용해야 한다면 여기에 명시합니다.
+    function:
+      definition: orderCreatedProducer;paymentResultConsumer # 함수 Bean 이름 정의
+
+# 다른 서비스 주소 설정
+payment:
+  service:
+    url: ${PAYMENT_SERVICE_URL:http://localhost:8092}
+
+logging:
+  level:
+    org.springframework.boot.autoconfigure.condition: TRACE
+    org.springframework.context: DEBUG
+    org.springframework.cloud.function: DEBUG
+    io.r2dbc.postgresql.client: DEBUG # R2DBC PostgreSQL 드라이버 로그 (필요시)
+    io.r2dbc.pool: DEBUG             # R2DBC 커넥션 풀 로그 (필요시)

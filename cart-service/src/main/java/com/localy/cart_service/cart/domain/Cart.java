@@ -19,5 +19,5 @@ public class Cart {
 
     private Map<String, CartItem> cartItems; // menuId (String)를 Key로 사용
 
-    private String storeId;
+    private Long storeId;
 }

@@ -1,8 +1,11 @@
 package com.localy.order_service.order.repository;
 
 import com.localy.order_service.order.domain.OrderLineItem;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaRepository; // JpaRepository 임포트
+import org.springframework.stereotype.Repository;
+// import java.util.List; // findByOrderIdFk 대신 JPA 연관관계 사용
 
-public interface OrderLineItemRepository extends JpaRepository<OrderLineItem, Long> {
-    // 필요한 추가적인 쿼리 메소드를 정의할 수 있습니다.
+@Repository
+public interface OrderLineItemRepository extends JpaRepository<OrderLineItem, Long> { // JpaRepository<OrderLineItem, Long>로 변경
+
 }

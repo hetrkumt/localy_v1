@@ -377,7 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       case StoreSortOption.reviewCountDesc: optionText = '리뷰수↓'; break;
                       case StoreSortOption.createdAtAsc: optionText = '오래된순'; break;
                       case StoreSortOption.createdAtDesc: optionText = '최신순'; break;
-                      case StoreSortOption.distance: optionText = '거리순'; break;
                     }
                     return DropdownMenuItem<StoreSortOption>(value: option, child: Text(optionText));
                   }).toList(),

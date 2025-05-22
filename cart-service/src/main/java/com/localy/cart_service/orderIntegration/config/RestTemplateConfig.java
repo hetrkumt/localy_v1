@@ -1,4 +1,4 @@
-//package com.localy.cart_service.orderIntegration.config;
+package com.localy.cart_service.orderIntegration.config;//package com.localy.cart_service.orderIntegration.config;
 //
 //import org.springframework.boot.web.client.RestTemplateBuilder;
 //import org.springframework.context.annotation.Bean;

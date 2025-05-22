@@ -4,7 +4,7 @@ services:
   #서비스
   edge-service:
     build:
-      context: ../../edge-service
+      context: ..../edge-service
     ports:
       - "9000:9000"
     depends_on:

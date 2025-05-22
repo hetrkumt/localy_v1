@@ -143,11 +143,11 @@ spring:
         jwt:
           issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8080/realms/localy}
 
-  data: 
-    redis: 
+  data:
+    redis:
       connect-timeout: 5s
-      host: ${SPRING_DATA_REDIS_HOST:localhost} # 변경된 환경 변수 이름 사용
-      port: ${SPRING_DATA_REDIS_PORT:6379}     # 변경된 환경 변수 이름 사용
+      host: ${SPRING_REDIS_HOST:localhost} # 변경된 환경 변수 이름 사용
+      port: ${SPRING_REDIS_PORT:6379}     # 변경된 환경 변수 이름 사용
 
   session:
     store-type: redis

@@ -3,9 +3,7 @@ package com.localy.order_service.order.domain;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.localy.order_service.order.domain.Order;
 import jakarta.persistence.*;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -15,6 +13,8 @@ import java.time.LocalDateTime;
 @Entity
 @Table(name = "order_line_items")
 @Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class OrderLineItem {
 
     @Id

@@ -1,14 +1,17 @@
+// 파일 위치: com.localy.store_service.store.service.StoreService.java
 package com.localy.store_service.store.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.localy.store_service.menu.domain.Menu; // Menu 임포트
 import com.localy.store_service.menu.service.MenuService; // MenuService 임포트
+import com.localy.store_service.review.domain.Review; // Review 임포트
 import com.localy.store_service.review.service.ReviewService;
 import com.localy.store_service.store.domain.Store;
-import com.localy.store_service.store.domain.StoreCategory; // StoreCategory 임포트 (가정)
+// import com.localy.store_service.store.domain.StoreCategory; // 필요시 사용
 import com.localy.store_service.store.repository.StoreRepository;
 import io.micrometer.common.lang.Nullable;
 import jakarta.annotation.PostConstruct;
-// lombok.RequiredArgsConstructor; // 생성자 직접 작성
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +33,7 @@ import java.util.NoSuchElementException;
 import java.util.UUID;
 
 @Service
-// @RequiredArgsConstructor
+@RequiredArgsConstructor
 public class StoreService {
 
     private final StoreRepository storeRepository;
@@ -43,13 +46,6 @@ public class StoreService {
 
     @Value("${app.image.url-path:/store-images/}")
     private String imageUrlPath;
-
-    public StoreService(StoreRepository storeRepository, ObjectMapper objectMapper, ReviewService reviewService, MenuService menuService) {
-        this.storeRepository = storeRepository;
-        this.objectMapper = objectMapper;
-        this.reviewService = reviewService;
-        this.menuService = menuService; // MenuService 주입
-    }
 
     @PostConstruct
     public void initStorageDirectory() {
@@ -64,6 +60,7 @@ public class StoreService {
         }
     }
 
+    // 이미지 저장/삭제 헬퍼 메서드 (이전과 동일)
     private Mono<String> uploadImageToStorage(@Nullable FilePart imageFile) {
         if (imageFile == null || imageFile.filename().isEmpty()) {
             return Mono.empty();
@@ -115,36 +112,50 @@ public class StoreService {
                 .then();
     }
 
-    private Mono<Store> enrichStoreWithReviewInfo(Store store) {
+    // 가게 정보에 평균 평점, 리뷰 개수, 메뉴 목록, 리뷰 목록을 채우는 헬퍼 메서드
+    private Mono<Store> enrichStoreDetails(Store store) {
         if (store == null || store.getId() == null) {
             return Mono.justOrEmpty(store);
         }
-        Mono<Double> averageRatingMono = reviewService.getAverageRatingByStoreId(store.getId()).defaultIfEmpty(0.0);
-        Mono<Long> reviewCountMono = reviewService.findReviewsByStoreId(store.getId()).count().defaultIfEmpty(0L);
+        Long storeId = store.getId();
 
-        return Mono.zip(averageRatingMono, reviewCountMono)
+        Mono<Double> averageRatingMono = reviewService.getAverageRatingByStoreId(storeId).defaultIfEmpty(0.0);
+        Mono<Long> reviewCountMono = reviewService.findReviewsByStoreId(storeId).count().defaultIfEmpty(0L);
+        Flux<Menu> menusFlux = menuService.findMenusByStoreId(storeId); // 페이지네이션 없는 전체 메뉴 목록
+        Flux<Review> reviewsFlux = reviewService.findReviewsByStoreId(storeId); // 페이지네이션 없는 전체 리뷰 목록 (필요시 페이지네이션 적용)
+
+        return Mono.zip(averageRatingMono, reviewCountMono, menusFlux.collectList(), reviewsFlux.collectList())
                 .map(tuple -> {
                     store.setAverageRating(tuple.getT1());
                     store.setReviewCount(tuple.getT2().intValue());
+                    store.setMenus(tuple.getT3()); // @Transient 필드에 메뉴 목록 설정
+                    store.setReviews(tuple.getT4()); // @Transient 필드에 리뷰 목록 설정
+                    System.out.println("--- StoreService: Enriched store (ID: " + storeId + ") with " + tuple.getT3().size() + " menus and " + tuple.getT4().size() + " reviews.");
                     return store;
                 })
-                .defaultIfEmpty(store);
+                .defaultIfEmpty(store); // 혹시라도 zip에서 empty가 발생하면 기존 store 반환
     }
 
-    public Flux<Store> findAllStores() { // 페이지네이션 미적용 버전 (기존 유지)
+    public Flux<Store> findAllStores() {
         System.out.println("--- StoreService: findAllStores 호출 (R2DBC) ---");
+        // 목록 조회 시에는 메뉴/리뷰를 모두 가져오면 성능에 부담이 될 수 있음.
+        // 여기서는 평균 평점과 리뷰 수만 포함하고, 메뉴/리뷰는 상세 조회 시에만 가져오도록 유지.
+        // 만약 목록에서도 일부 메뉴/리뷰 정보가 필요하다면 별도 로직 추가.
         return storeRepository.findAll()
-                .flatMap(this::enrichStoreWithReviewInfo);
+                .flatMap(this::enrichStoreWithReviewInfo); // 이전 버전의 enrich (평점/리뷰 수만)
     }
 
+    // 특정 가게 상세 정보 조회 시 메뉴와 리뷰 목록 포함
     public Mono<Store> findStoreById(Long id) {
         System.out.println("--- StoreService: findStoreById 호출 (ID: " + id + ", R2DBC) ---");
         return storeRepository.findById(id)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
-                .flatMap(this::enrichStoreWithReviewInfo);
+                .flatMap(this::enrichStoreDetails); // 메뉴와 리뷰까지 모두 채우는 메서드 호출
     }
 
+    // 가게 생성 (이전과 동일, 초기에는 메뉴/리뷰 없음)
     public Mono<Store> createStore(Store store, String userId, Mono<FilePart> mainImageFileMono, Flux<FilePart> galleryImageFilesFlux) {
+        // ... (이전 createStore 코드와 동일하게 유지) ...
         System.out.println("--- StoreService: createStore 호출 (Name: " + store.getName() + ", UserID: " + userId + ") ---");
         if (userId == null || userId.trim().isEmpty()) {
             return Mono.error(new SecurityException("User ID is required to create a store."));
@@ -156,8 +167,9 @@ public class StoreService {
         store.setOwnerId(userId);
         store.setCreatedAt(LocalDateTime.now());
         store.setUpdatedAt(LocalDateTime.now());
-        store.setAverageRating(0.0);
-        store.setReviewCount(0);
+        store.setAverageRating(0.0); // 초기값
+        store.setReviewCount(0);    // 초기값
+        // 생성 시점에는 menus와 reviews는 비어있거나 null로 시작
 
         Mono<String> mainImageUrlMonoResult = mainImageFileMono
                 .flatMap(this::uploadImageToStorage)
@@ -172,24 +184,24 @@ public class StoreService {
         return Mono.zip(mainImageUrlMonoResult, galleryImageUrlsMonoResult)
                 .flatMap(tuple -> {
                     List<String> galleryImageUrls = tuple.getT2();
-                    store.setGalleryImageUrls(galleryImageUrls);
+                    store.setGalleryImageUrls(galleryImageUrls); // List<String>을 JSON 문자열로 변환하여 저장
                     return storeRepository.save(store);
                 })
                 .doOnSuccess(savedStore -> System.out.println("--- StoreService: 가게 생성 완료 (ID: " + savedStore.getId() + ") ---"))
                 .doOnError(e -> System.err.println("--- StoreService: createStore 오류 - " + e.getMessage() + " ---"));
     }
 
+    // 가게 수정 (수정 후 반환 시 메뉴/리뷰 포함)
     public Mono<Store> updateStore(Long id, Store updatedStoreData, String userId, Mono<FilePart> newMainImageFileMono, Flux<FilePart> newGalleryImageFilesFlux, List<String> galleryImagesToDelete) {
-        // ... (이전 코드와 동일) ...
+        // ... (기존 updateStore의 이미지 처리 및 기본 정보 업데이트 로직은 유지) ...
         System.out.println("--- StoreService: updateStore 호출 (ID: " + id + ", UserID: " + userId + ") ---");
         return storeRepository.findById(id)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
                 .flatMap(existingStore -> {
+                    // ... (권한 확인 및 기본 필드 업데이트 로직) ...
                     if (userId == null || !userId.equals(existingStore.getOwnerId())) {
                         return Mono.error(new SecurityException("User is not authorized to update this store."));
                     }
-                    System.out.println("--- StoreService: 권한 확인 통과 --- 업데이트 시작 (Store ID: " + id + ") ---");
-
                     existingStore.setName(updatedStoreData.getName());
                     existingStore.setDescription(updatedStoreData.getDescription());
                     existingStore.setAddress(updatedStoreData.getAddress());
@@ -243,13 +255,14 @@ public class StoreService {
                                 return storeRepository.save(existingStore);
                             });
                 })
-                .flatMap(this::enrichStoreWithReviewInfo)
+                .flatMap(this::enrichStoreDetails) // 업데이트 후 메뉴와 리뷰까지 모두 채워서 반환
                 .doOnSuccess(savedStore -> System.out.println("--- StoreService: 가게 수정 완료 (ID: " + id + ") ---"))
                 .doOnError(e -> System.err.println("--- StoreService: updateStore 오류 - " + e.getMessage() + " ---"));
     }
 
+    // 가게 삭제 (이전과 동일)
     public Mono<Void> deleteStore(Long id, String userId) {
-        // ... (이전 코드와 동일) ...
+        // ... (이전 deleteStore 코드와 동일하게 유지) ...
         System.out.println("--- StoreService: deleteStore 호출 (ID: " + id + ", UserID: " + userId + ") ---");
         return storeRepository.findById(id)
                 .switchIfEmpty(Mono.error(new NoSuchElementException("Store not found with ID: " + id)))
@@ -257,8 +270,6 @@ public class StoreService {
                     if (userId == null || !userId.equals(existingStore.getOwnerId())) {
                         return Mono.error(new SecurityException("User is not authorized to delete this store."));
                     }
-                    System.out.println("--- StoreService: 권한 확인 통과 --- 가게 삭제 시작 (Store ID: " + id + ") ---");
-
                     Mono<Void> deleteMainImageMono = Mono.empty();
                     if (existingStore.getMainImageUrl() != null) {
                         deleteMainImageMono = deleteImageFile(existingStore.getMainImageUrl());
@@ -268,73 +279,75 @@ public class StoreService {
                     if (galleryUrls != null && !galleryUrls.isEmpty()) {
                         deleteGalleryImagesMono = deleteImageFiles(galleryUrls);
                     }
-
                     return Mono.when(deleteMainImageMono, deleteGalleryImagesMono)
-                            .then(storeRepository.deleteById(id));
+                            .then(storeRepository.deleteById(id)); // 메뉴, 리뷰는 DB의 ON DELETE CASCADE에 의해 처리됨
                 })
                 .doOnSuccess(aVoid -> System.out.println("--- StoreService: 가게 삭제 완료 (ID: " + id + ") ---"))
                 .doOnError(e -> System.err.println("--- StoreService: deleteStore 오류 - " + e.getMessage() + " ---"));
     }
 
+    // 가게 검색 및 필터링 (목록 조회 시에는 메뉴/리뷰 전체를 가져오지 않음, 필요시 enrichStoreWithReviewInfo 사용)
     public Flux<Store> searchAndFilterStores(
             @Nullable String name,
-            @Nullable String categoryString, // StoreCategory Enum 대신 String으로 받음
+            @Nullable String categoryString,
             Pageable pageable) {
-        System.out.println("--- StoreService: searchAndFilterStores 호출 (Name: " + name + ", Category: " + categoryString + ", Page: " + pageable.getPageNumber() + ", Size: " + pageable.getPageSize() + ") ---");
-
+        // ... (이전 searchAndFilterStores 코드와 유사하게 유지하되, enrichStoreWithReviewInfo 사용) ...
+        System.out.println("--- StoreService: searchAndFilterStores 호출 (Name: " + name + ", Category: " + categoryString + ") ---");
         Flux<Store> storesFlux;
+        // ... (이전 검색/필터링 로직) ...
         if (name != null && !name.isEmpty() && categoryString != null && !categoryString.isEmpty()) {
-            // StoreCategory enum 변환 (StoreCategory Enum이 정의되어 있다고 가정)
-            // StoreCategory categoryEnum = StoreCategory.fromString(categoryString.toUpperCase()); // 이 메서드가 StoreCategory Enum에 있어야 함
-            // storesFlux = storeRepository.findByNameContainingIgnoreCaseAndCategory(name, categoryEnum, pageable);
-            // 임시: 이름과 카테고리 둘 다 필터링하는 Repository 메서드가 없으므로, 이름으로만 검색 후 애플리케이션 레벨에서 필터링 (비효율적)
-            // 또는 Repository에 해당 메서드 추가 필요
-            storesFlux = storeRepository.findByNameContainingIgnoreCase(name, pageable)
-                    .filter(store -> categoryString.equalsIgnoreCase(store.getCategory().name())); // StoreCategory Enum 가정
-            System.out.println("--- StoreService: Searching by name AND category (filtering category in-memory) ---");
+            storesFlux = storeRepository.findByNameContainingIgnoreCase(name, pageable) // 임시로 이름으로만 검색 후 필터링
+                    .filter(store -> categoryString.equalsIgnoreCase(store.getCategory().name()));
         } else if (name != null && !name.isEmpty()) {
             storesFlux = storeRepository.findByNameContainingIgnoreCase(name, pageable);
-            System.out.println("--- StoreService: Searching by name only ---");
         } else if (categoryString != null && !categoryString.isEmpty()) {
-            // StoreCategory categoryEnum = StoreCategory.fromString(categoryString.toUpperCase());
-            // storesFlux = storeRepository.findByCategory(categoryEnum, pageable); // Repository에 이 메서드 필요
-            // 임시: 카테고리 단독 검색 Repository 메서드 없다고 가정하고, findAll 후 필터링 (매우 비효율적)
-            storesFlux = storeRepository.findAll(pageable.getSort()) // 정렬만 적용
+            // StoreCategory enum 변환 및 Repository 호출 필요
+            // storesFlux = storeRepository.findByCategory(StoreCategory.valueOf(categoryString.toUpperCase()), pageable);
+            storesFlux = storeRepository.findAll(pageable.getSort()) // 임시
                     .filter(store -> categoryString.equalsIgnoreCase(store.getCategory().name()))
-                    .skip(pageable.getOffset()).take(pageable.getPageSize()); // 수동 페이지네이션
-            System.out.println("--- StoreService: Searching by category only (filtering in-memory, inefficient) ---");
+                    .skip(pageable.getOffset()).take(pageable.getPageSize());
         } else {
-            // storeRepository.findAllBy(pageable) 또는 findAll(Sort) 후 수동 페이지네이션
             storesFlux = storeRepository.findAll(pageable.getSort())
                     .skip(pageable.getOffset()).take(pageable.getPageSize());
-            System.out.println("--- StoreService: Finding all with pagination and sort ---");
         }
-        return storesFlux.flatMap(this::enrichStoreWithReviewInfo);
+        return storesFlux.flatMap(this::enrichStoreWithReviewInfo); // 평균 평점 및 리뷰 수만 포함
     }
 
-    /**
-     * 메뉴 이름 키워드를 포함하는 메뉴가 있는 가게들을 검색합니다. (페이지네이션 지원)
-     * @param menuNameKeyword 메뉴 이름 검색 키워드
-     * @param pageable 페이지 정보
-     * @return 검색된 가게 목록 (Flux<Store>)
-     */
+    // 메뉴 이름으로 가게 검색 (반환 시 메뉴/리뷰 포함)
     public Flux<Store> findStoresByMenuName(String menuNameKeyword, Pageable pageable) {
         System.out.println("--- StoreService: findStoresByMenuName 호출 (Keyword: " + menuNameKeyword + ") ---");
         if (menuNameKeyword == null || menuNameKeyword.trim().isEmpty()) {
-            return Flux.empty(); // 키워드가 없으면 빈 결과 반환
+            return Flux.empty();
         }
-        return menuService.getStoreIdsByMenuNameKeyword(menuNameKeyword) // Flux<Long> (storeId 목록)
-                .collectList() // Mono<List<Long>>
+        return menuService.getStoreIdsByMenuNameKeyword(menuNameKeyword)
+                .collectList()
                 .flatMapMany(storeIds -> {
                     if (storeIds.isEmpty()) {
                         return Flux.empty();
                     }
-                    // findAllById는 Pageable을 직접 지원하지 않으므로, ID 목록으로 조회 후 수동 페이지네이션
-                    // 또는 StoreRepository에 List<Long>과 Pageable을 받는 커스텀 메서드 필요
-                    return storeRepository.findAllByIdIn(storeIds, pageable.getSort()) // findAllByIdIn(List<Long> ids, Sort sort)
+                    return storeRepository.findAllByIdIn(storeIds, pageable.getSort())
                             .skip(pageable.getOffset())
                             .take(pageable.getPageSize())
-                            .flatMap(this::enrichStoreWithReviewInfo);
+                            .flatMap(this::enrichStoreDetails); // 메뉴와 리뷰까지 모두 채워서 반환
                 });
+    }
+
+    // 가게 정보에 평균 평점과 리뷰 개수만 채우는 헬퍼 메서드 (목록용)
+    private Mono<Store> enrichStoreWithReviewInfo(Store store) {
+        if (store == null || store.getId() == null) {
+            return Mono.justOrEmpty(store);
+        }
+        Long storeId = store.getId();
+        Mono<Double> averageRatingMono = reviewService.getAverageRatingByStoreId(storeId).defaultIfEmpty(0.0);
+        Mono<Long> reviewCountMono = reviewService.findReviewsByStoreId(storeId).count().defaultIfEmpty(0L);
+
+        return Mono.zip(averageRatingMono, reviewCountMono)
+                .map(tuple -> {
+                    store.setAverageRating(tuple.getT1());
+                    store.setReviewCount(tuple.getT2().intValue());
+                    // 여기서는 menus와 reviews를 설정하지 않음 (목록 조회 시 성능 고려)
+                    return store;
+                })
+                .defaultIfEmpty(store);
     }
 }

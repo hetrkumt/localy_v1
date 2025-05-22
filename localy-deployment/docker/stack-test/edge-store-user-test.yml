@@ -42,25 +42,25 @@ services:
   # --- 관리 도구 ---
 
   # PgAdmin (PostgreSQL 관리 도구)
-#  localy-pgadmin:
-#    image: dpage/pgadmin4:latest # PgAdmin 이미지
-#    hostname: localy-pgadmin
-#    ports:
-#      - "5050:80" # 호스트 5050 포트를 컨테이너 내부 80 포트에 매핑
-#    environment:
-#      PGADMIN_DEFAULT_EMAIL: admin@test.com # PgAdmin 로그인 이메일
-#      PGADMIN_DEFAULT_PASSWORD: admin # PgAdmin 로그인 비밀번호
-#      PGADMIN_LISTEN_PORT: 80 # PgAdmin이 리스닝할 포트 (컨테이너 내부)
-#    depends_on:
-#      - localy-store-postgre # 스토어 DB에 의존성 추가 (필요에 따라 다른 DB도 추가)
-#      - localy-order-postgre
-#      - localy-payment-postgre
-#    deploy:
-#      replicas: 1
-#      restart_policy:
-#        condition: on-failure
-#    networks:
-#      - app-network
+  localy-pgadmin:
+    image: dpage/pgadmin4:latest # PgAdmin 이미지
+    hostname: localy-pgadmin
+    ports:
+      - "5050:80" # 호스트 5050 포트를 컨테이너 내부 80 포트에 매핑
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@test.com # PgAdmin 로그인 이메일
+      PGADMIN_DEFAULT_PASSWORD: admin # PgAdmin 로그인 비밀번호
+      PGADMIN_LISTEN_PORT: 80 # PgAdmin이 리스닝할 포트 (컨테이너 내부)
+    depends_on:
+      - localy-store-postgre # 스토어 DB에 의존성 추가 (필요에 따라 다른 DB도 추가)
+      - localy-order-postgre
+      - localy-payment-postgre
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    networks:
+      - app-network
 
   # --- 인증/인가 시스템 ---
 

@@ -1,18 +1,20 @@
 package com.localy.payment_service.payment.service;
 
 import com.localy.payment_service.payment.domain.Payment;
-import com.localy.payment_service.payment.domain.VirtualAccount;
 import com.localy.payment_service.order.consumer.dto.OrderCreatedEvent;
 import com.localy.payment_service.payment.message.dto.PaymentResultEvent;
 import com.localy.payment_service.payment.message.PaymentResultProducerConfig;
 import com.localy.payment_service.payment.repository.PaymentRepository;
-import com.localy.payment_service.payment.repository.VirtualAccountRepository;
+import com.localy.payment_service.virtualAcount.domain.VirtualAccount;
+
+import com.localy.payment_service.virtualAcount.repository.VirtualAccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,42 +28,42 @@ public class PaymentProcessorService {
     public void processOrderCreatedEvent(OrderCreatedEvent orderCreatedEvent) {
         Long orderId = orderCreatedEvent.getOrderId();
         String userId = orderCreatedEvent.getUserId();
-        String storeId = orderCreatedEvent.getStoreId();
+        Long storeId = orderCreatedEvent.getStoreId();
         BigDecimal orderAmount = orderCreatedEvent.getTotalAmount();
 
         System.out.println("결제 처리 시작: 주문 ID=" + orderId);
 
-        VirtualAccount customerAccount = virtualAccountRepository.findByUserId(userId);
-        if (customerAccount == null) {
+        Optional<VirtualAccount> customerAccount = virtualAccountRepository.findByUserId(userId);
+        if (customerAccount.isEmpty()) {
             handlePaymentFailure(orderId, orderAmount, null);
             return;
         }
 
-        if (!isBalanceSufficient(customerAccount, orderAmount)) {
+        if (!isBalanceSufficient(customerAccount.orElse(null), orderAmount)) {
             handlePaymentFailure(orderId, orderAmount, null);
             return;
         }
 
-        debitCustomerAccount(customerAccount, orderAmount);
+        debitCustomerAccount(customerAccount.orElse(null), orderAmount);
 
-        VirtualAccount storeOwnerAccount = virtualAccountRepository.findByStoreId(storeId);
-        if (storeOwnerAccount == null) {
-            handlePaymentFailure(orderId, orderAmount, customerAccount); // 롤백 고려
+        Optional<VirtualAccount> storeOwnerAccount = virtualAccountRepository.findByStoreId(storeId);
+        if (storeOwnerAccount.isEmpty()) {
+            handlePaymentFailure(orderId, orderAmount, customerAccount.orElse(null)); // 롤백 고려
             return;
         }
 
-        creditStoreOwnerAccount(storeOwnerAccount, orderAmount);
+        creditStoreOwnerAccount(storeOwnerAccount.orElse(null), orderAmount);
 
         Payment payment = savePaymentSuccess(orderId, orderAmount);
         sendPaymentResult(orderId, payment.getPaymentId(), "APPROVED");
     }
 
     private VirtualAccount retrieveCustomerAccount(String userId) {
-        VirtualAccount account = virtualAccountRepository.findByUserId(userId);
-        if (account == null) {
+        Optional<VirtualAccount> account = virtualAccountRepository.findByUserId(userId);
+        if (account.isEmpty()) {
             System.err.println("손님 가상 계좌를 찾을 수 없습니다: 사용자 ID=" + userId);
         }
-        return account;
+        return account.orElse(null);
     }
 
     private boolean isBalanceSufficient(VirtualAccount account, BigDecimal amount) {
@@ -78,12 +80,12 @@ public class PaymentProcessorService {
         System.out.println("손님 가상 계좌 잔액 차감 완료: 사용자 ID=" + account.getUserId() + ", 잔액=" + account.getBalance());
     }
 
-    private VirtualAccount retrieveStoreOwnerAccount(String storeId) {
-        VirtualAccount account = virtualAccountRepository.findByStoreId(storeId);
-        if (account == null) {
+    private VirtualAccount retrieveStoreOwnerAccount(Long storeId) {
+        Optional<VirtualAccount> account = virtualAccountRepository.findByStoreId(storeId);
+        if (account.isEmpty()) {
             System.err.println("가계 주인 가상 계좌를 찾을 수 없습니다: 가계 ID=" + storeId);
         }
-        return account;
+        return account.orElse(null);
     }
 
     private void creditStoreOwnerAccount(VirtualAccount account, BigDecimal amount) {
