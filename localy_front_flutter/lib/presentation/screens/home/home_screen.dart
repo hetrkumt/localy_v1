@@ -1,5 +1,5 @@
 // 파일 위치: lib/presentation/screens/home/home_screen.dart
-import 'dart:async'; // Completer, Timer 사용을 위해
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_naver_map/flutter_naver_map.dart';
 import 'package:localy_front_flutter/data/models/store_models.dart';
@@ -9,6 +9,7 @@ import 'package:localy_front_flutter/presentation/screens/auth/login_screen.dart
 import 'package:localy_front_flutter/presentation/screens/cart/cart_screen.dart';
 import 'package:localy_front_flutter/presentation/screens/order/order_list_screen.dart';
 import 'package:localy_front_flutter/presentation/screens/store/store_detail_screen.dart';
+import 'package:localy_front_flutter/presentation/screens/my_page/my_page_screen.dart';
 import 'package:localy_front_flutter/presentation/widgets/store_card.dart';
 import 'package:provider/provider.dart';
 
@@ -25,72 +26,109 @@ class _HomeScreenState extends State<HomeScreen> {
   final ScrollController _scrollController = ScrollController();
 
   bool _isListView = true;
-  String? _selectedCategory;
+  String? _selectedCategoryValue; // StoreCategory enum 값을 문자열로 저장
   StoreSortOption _selectedSortOption = StoreSortOption.createdAtDesc;
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;
 
   NCameraPosition _currentCameraPosition = const NCameraPosition(
-    target: NLatLng(37.5666102, 126.9783881),
+    target: NLatLng(37.5666102, 126.9783881), // 서울 시청
     zoom: 12,
   );
-  // _currentMarkers는 StoreProvider의 stores가 변경될 때 _updateMarkersOnMap에 의해 업데이트됨
-  // Set<NMarker> _currentMarkers = {}; // 직접 관리보다는 Provider 데이터 기반으로 생성
+  int _currentBottomNavIndex = 0;
+
+  // Helper 메서드를 _HomeScreenState 클래스의 멤버로 이동
+  String _getSortOptionText(StoreSortOption option) {
+    switch (option) {
+      case StoreSortOption.createdAtDesc: return '최신순';
+      case StoreSortOption.ratingDesc: return '평점 높은순';
+      case StoreSortOption.reviewCountDesc: return '리뷰 많은순';
+      case StoreSortOption.nameAsc: return '이름 오름차순';
+      case StoreSortOption.createdAtAsc: return '오래된순';
+      case StoreSortOption.nameDesc: return '이름 내림차순';
+      case StoreSortOption.ratingAsc: return '평점 낮은순';
+      case StoreSortOption.reviewCountAsc: return '리뷰 적은순';
+      default: return option.name; // 기본값으로 enum 이름 사용
+    }
+  }
+  String _storeCategoryToKo(StoreCategory category) {
+    switch (category) {
+      case StoreCategory.FRUITS_VEGETABLES: return "과일/채소";
+      case StoreCategory.MEAT_BUTCHER: return "정육점";
+      case StoreCategory.FISH_SEAFOOD: return "생선/해산물";
+      case StoreCategory.RICE_GRAINS: return "쌀/잡곡";
+      case StoreCategory.SIDE_DISHES: return "반찬";
+      case StoreCategory.DAIRY_PRODUCTS: return "유제품";
+      case StoreCategory.BREAD_BAKERY: return "빵/베이커리";
+      case StoreCategory.NUTS_DRIED_FRUITS: return "견과/건과";
+      case StoreCategory.KOREAN_FOOD: return "한식";
+      case StoreCategory.SNACKS_STREET_FOOD: return "분식/길거리음식";
+      case StoreCategory.CHINESE_FOOD: return "중식";
+      case StoreCategory.JAPANESE_FOOD: return "일식";
+      case StoreCategory.WESTERN_FOOD: return "양식";
+      case StoreCategory.CAFE_DESSERT: return "카페/디저트";
+      case StoreCategory.CHICKEN_BURGER: return "치킨/버거";
+      case StoreCategory.HOUSEHOLD_GOODS: return "생활용품";
+      case StoreCategory.UNKNOWN: return "기타";
+      default: return ''; // 한글 이름이 없는 경우 빈 문자열 반환
+    }
+  }
+
+  String _getCategoryDisplayText(String? categoryValue) {
+    if (categoryValue == null) return '전체 카테고리';
+    try {
+      StoreCategory enumCat = StoreCategory.values.firstWhere((cat) => storeCategoryToString(cat) == categoryValue);
+      return _storeCategoryToKo(enumCat);
+    } catch (e) {
+      return '카테고리'; // 일치하는 enum 못 찾으면 기본값
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialStores();
-      // Provider 리스너는 build 메서드에서 Consumer나 Selector를 사용하거나,
-      // 정말 필요하다면 여기서 addListener를 사용할 수 있지만, 마커 업데이트는 지도 준비 후 또는 뷰 전환 시점에 하는 것이 더 적절.
-      // _setupMapMarkersListener();
     });
-
     _scrollController.addListener(() {
+      final storeProvider = context.read<StoreProvider>();
       if (_scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent - 300 &&
-          !context.read<StoreProvider>().isLoading &&
-          !context.read<StoreProvider>().isLastPage) {
-        context.read<StoreProvider>().fetchStores(
-          name: context.read<StoreProvider>().currentSearchName,
-          category: context.read<StoreProvider>().currentSearchCategory,
-          menuKeyword: context.read<StoreProvider>().currentSearchMenuKeyword,
-          sortOption: context.read<StoreProvider>().currentSortOption,
+          !storeProvider.isLoading &&
+          !storeProvider.isLastPage) {
+        storeProvider.fetchStores(
+          name: storeProvider.currentSearchName,
+          category: storeProvider.currentSearchCategory,
+          menuKeyword: storeProvider.currentSearchMenuKeyword,
+          sortOption: storeProvider.currentSortOption,
           loadMore: true,
         );
       }
     });
   }
 
-  // void _setupMapMarkersListener() {
-  //   final storeProvider = Provider.of<StoreProvider>(context, listen: false);
-  //   storeProvider.addListener(_updateMarkersFromProvider);
-  // }
-
-  // void _updateMarkersFromProvider() {
-  //   if (!mounted) return;
-  //   final storeProvider = Provider.of<StoreProvider>(context, listen: false);
-  //   _updateMarkersOnMap(storeProvider.stores);
-  // }
-
   Future<void> _loadInitialStores() async {
     final storeProvider = Provider.of<StoreProvider>(context, listen: false);
     storeProvider.updateSearchName(_searchController.text.isNotEmpty ? _searchController.text : null);
-    storeProvider.updateSearchCategory(_selectedCategory);
+    storeProvider.updateSearchCategory(_selectedCategoryValue);
+    storeProvider.updateSearchMenuKeyword(_searchController.text.isNotEmpty ? _searchController.text : null);
     storeProvider.updateSortOption(_selectedSortOption);
     await storeProvider.fetchStores(
         name: storeProvider.currentSearchName,
         category: storeProvider.currentSearchCategory,
         menuKeyword: storeProvider.currentSearchMenuKeyword,
         sortOption: storeProvider.currentSortOption);
-    // _moveCameraToFirstStore(storeProvider.stores); // 필요시 활성화
+    if (!_isListView && mounted && _mapControllerCompleter.isCompleted) {
+      _updateMarkersOnMap(storeProvider.stores);
+    }
   }
 
   Future<void> _onRefresh() async {
     final storeProvider = Provider.of<StoreProvider>(context, listen: false);
     await storeProvider.refreshStores();
-    // _moveCameraToFirstStore(storeProvider.stores); // 필요시 활성화
+    if (!_isListView && mounted && _mapControllerCompleter.isCompleted) {
+      _updateMarkersOnMap(storeProvider.stores);
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -99,18 +137,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final storeProvider = Provider.of<StoreProvider>(context, listen: false);
       storeProvider.updateSearchName(query.isNotEmpty ? query : null);
       storeProvider.updateSearchMenuKeyword(query.isNotEmpty ? query : null);
-      storeProvider.fetchStores(
-        name: storeProvider.currentSearchName,
-        menuKeyword: storeProvider.currentSearchMenuKeyword,
-        category: storeProvider.currentSearchCategory,
-        sortOption: storeProvider.currentSortOption,
-      );
+      storeProvider.fetchStores(loadMore: false);
     });
   }
 
   Future<void> _updateMarkersOnMap(List<Store> stores) async {
     if (!_mapControllerCompleter.isCompleted || !mounted) return;
-
     final mapController = await _mapControllerCompleter.future;
     final Set<NMarker> newMarkers = {};
     for (final store in stores) {
@@ -126,11 +158,9 @@ class _HomeScreenState extends State<HomeScreen> {
         newMarkers.add(marker);
       }
     }
-
     mapController.clearOverlays(type: NOverlayType.marker);
     if (newMarkers.isNotEmpty) {
       mapController.addOverlayAll(newMarkers);
-      debugPrint("${newMarkers.length}개의 마커가 지도에 업데이트되었습니다.");
     }
   }
 
@@ -141,7 +171,7 @@ class _HomeScreenState extends State<HomeScreen> {
       );
       _displayStoreInfoBottomSheet(store);
     } catch (e) {
-      debugPrint("탭된 마커에 해당하는 가게 정보를 찾을 수 없습니다. Marker ID: ${tappedMarker.info.id}, 오류: $e");
+      debugPrint("마커 탭 오류: $e");
     }
   }
 
@@ -150,6 +180,9 @@ class _HomeScreenState extends State<HomeScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (BuildContext context) {
         return DraggableScrollableSheet(
           expand: false,
@@ -162,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
               decoration: BoxDecoration(
                 color: Theme.of(context).cardColor,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                boxShadow: [ BoxShadow(color: Colors.grey.withOpacity(0.3), spreadRadius: 1, blurRadius: 8, offset: const Offset(0, -2)) ],
+                boxShadow: [ BoxShadow(color: Colors.black.withOpacity(0.15), spreadRadius: 0, blurRadius: 10, offset: const Offset(0, -2)) ],
               ),
               child: ListView(
                 controller: scrollController,
@@ -171,7 +204,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(store.name, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Row(children: [
-                    Icon(Icons.star, color: Colors.amber[600], size: 18), const SizedBox(width: 4),
+                    Icon(Icons.star_rounded, color: Colors.amber[600], size: 18), const SizedBox(width: 4),
                     Text(store.averageRating?.toStringAsFixed(1) ?? 'N/A', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
                     const SizedBox(width: 6),
                     Text('(${store.reviewCount ?? 0} 리뷰)', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
@@ -180,7 +213,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (store.address != null) ListTile(leading: Icon(Icons.location_on_outlined, color: Theme.of(context).primaryColor), title: Text(store.address!), dense: true, contentPadding: EdgeInsets.zero),
                   if (store.phone != null) ListTile(leading: Icon(Icons.phone_outlined, color: Theme.of(context).primaryColor), title: Text(store.phone!), dense: true, contentPadding: EdgeInsets.zero),
                   if (store.openingHours != null) ListTile(leading: Icon(Icons.access_time_outlined, color: Theme.of(context).primaryColor), title: Text(store.openingHours!), dense: true, contentPadding: EdgeInsets.zero),
-                  ListTile(leading: Icon(Icons.category_outlined, color: Theme.of(context).primaryColor), title: Text('카테고리: ${storeCategoryToString(store.category)}'), dense: true, contentPadding: EdgeInsets.zero),
+                  ListTile(leading: Icon(Icons.category_outlined, color: Theme.of(context).primaryColor), title: Text('카테고리: ${_storeCategoryToKo(store.category)}'), dense: true, contentPadding: EdgeInsets.zero),
                   const SizedBox(height: 20),
                   ElevatedButton.icon(
                     icon: const Icon(Icons.store_mall_directory_outlined),
@@ -200,54 +233,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _moveCameraToPosition(NLatLng position, {double zoom = 15}) async {
-    if (!mounted || !_mapControllerCompleter.isCompleted) return;
-    final mapController = await _mapControllerCompleter.future;
-    mapController.updateCamera(
-      NCameraUpdate.scrollAndZoomTo(target: position, zoom: zoom),
-    );
-  }
-
-  // void _moveCameraToFirstStore(List<Store> stores) { // 사용되지 않는다면 제거 가능
-  //   if (stores.isNotEmpty) {
-  //     final firstStoreWithLocation = stores.firstWhere(
-  //       (store) => store.latitude != null && store.longitude != null,
-  //       orElse: () => stores.first,
-  //     );
-  //     if (firstStoreWithLocation.latitude != null && firstStoreWithLocation.longitude != null) {
-  //       _moveCameraToPosition(
-  //         NLatLng(firstStoreWithLocation.latitude!, firstStoreWithLocation.longitude!),
-  //         zoom: 14,
-  //       );
-  //     }
-  //   }
-  // }
-
   @override
   void dispose() {
     _searchController.dispose();
     _scrollController.dispose();
     _debounce?.cancel();
-    // Provider.of<StoreProvider>(context, listen: false).removeListener(_updateMarkersFromProvider); // 리스너 사용 시 제거
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final storeProvider = Provider.of<StoreProvider>(context); // UI 업데이트를 위해 listen:true (기본값)
+    final storeProvider = Provider.of<StoreProvider>(context);
 
-    // 지도 보기 모드일 때, storeProvider.stores가 변경되면 마커를 업데이트합니다.
-    // 이 로직은 _buildMapView의 onMapReady에서도 수행되지만,
-    // 필터링/검색 등으로 stores가 변경된 후 지도가 이미 ready 상태일 때를 위함입니다.
     if (!_isListView && _mapControllerCompleter.isCompleted) {
-      WidgetsBinding.instance.addPostFrameCallback((_) { // 현재 빌드 사이클 이후에 실행
-        if (mounted) { // 위젯이 여전히 마운트되어 있는지 확인
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
           _updateMarkersOnMap(storeProvider.stores);
         }
       });
     }
-
 
     return Scaffold(
       appBar: AppBar(
@@ -260,10 +265,12 @@ class _HomeScreenState extends State<HomeScreen> {
               setState(() {
                 _isListView = !_isListView;
                 if (!_isListView) {
-                  // 지도 보기로 전환될 때, 현재 storeProvider의 가게들로 마커를 즉시 업데이트 시도
-                  // 지도가 준비된 후에 마커가 그려지도록 _buildMapView의 onMapReady에서 처리하는 것이 더 안정적일 수 있음
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) _updateMarkersOnMap(storeProvider.stores);
+                    if (mounted && _mapControllerCompleter.isCompleted) {
+                      _updateMarkersOnMap(storeProvider.stores);
+                    } else if (mounted && !_mapControllerCompleter.isCompleted) {
+                      debugPrint("지도 보기 전환: 지도 컨트롤러 아직 준비 안됨");
+                    }
                   });
                 }
               });
@@ -294,103 +301,161 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       bottomNavigationBar: BottomNavigationBar(
         type: BottomNavigationBarType.fixed,
-        currentIndex: 0,
+        currentIndex: _currentBottomNavIndex,
         onTap: (index) {
-          if (index == 2) {
-            Navigator.of(context).pushNamed(CartScreen.routeName);
-          } else if (index == 3) {
-            Navigator.of(context).pushNamed(OrderListScreen.routeName);
+          if (index == _currentBottomNavIndex && index == 0) {
+            if (_isListView) {
+              if (_scrollController.hasClients) {
+                _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+              }
+            }
+            _onRefresh();
+            return;
           }
+          setState(() { _currentBottomNavIndex = index; });
+
+          if (index == 0) { /* 홈 화면 (현재) */ }
+          else if (index == 1) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("검색 화면 (구현 예정)"))); }
+          else if (index == 2) { Navigator.of(context).pushNamed(CartScreen.routeName); }
+          else if (index == 3) { Navigator.of(context).pushNamed(OrderListScreen.routeName); }
+          else if (index == 4) { Navigator.of(context).pushNamed(MyPageScreen.routeName); }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: '홈'),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: '검색'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: '장바구니'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: '주문내역'),
+          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), activeIcon: Icon(Icons.home), label: '홈'),
+          BottomNavigationBarItem(icon: Icon(Icons.search_outlined), activeIcon: Icon(Icons.search), label: '검색'),
+          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart_outlined), activeIcon: Icon(Icons.shopping_cart), label: '장바구니'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long_outlined), activeIcon: Icon(Icons.receipt_long), label: '주문내역'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline_rounded), activeIcon: Icon(Icons.person_rounded), label: '마이페이지'),
         ],
+        selectedItemColor: Theme.of(context).primaryColor,
+        unselectedItemColor: Colors.grey[600],
+        showUnselectedLabels: true,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
       ),
     );
   }
 
   Widget _buildSearchAndFilterBar(StoreProvider storeProvider) {
-    // ... (이전 코드와 동일) ...
-    return Padding(
-      padding: const EdgeInsets.all(8.0),
+    final ThemeData theme = Theme.of(context);
+    InputDecoration dropdownDecoration(String label, IconData iconData) {
+      return InputDecoration(
+        prefixIcon: Padding(
+          padding: const EdgeInsets.only(left: 12.0, right: 8.0),
+          child: Icon(iconData, size: 20, color: Colors.grey[600]),
+        ),
+        hintText: label,
+        hintStyle: TextStyle(color: Colors.grey[600], fontSize: 14, fontWeight: FontWeight.w500),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide(color: Colors.grey[300]!)),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide(color: Colors.grey[300]!)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10.0), borderSide: BorderSide(color: theme.primaryColor, width: 1.5)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12.0),
+        isDense: true,
+        fillColor: Colors.white,
+        filled: true,
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16.0, 12.0, 16.0, 16.0),
+      color: Colors.grey[50],
       child: Column(
         children: [
           TextField(
             controller: _searchController,
             decoration: InputDecoration(
-              hintText: '가게 또는 메뉴 검색...',
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0), borderSide: BorderSide.none),
+              hintText: '가게 또는 메뉴 이름으로 검색...',
+              hintStyle: TextStyle(fontSize: 15, color: Colors.grey[500]),
+              prefixIcon: Icon(Icons.search_rounded, color: Colors.grey[600], size: 22),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(25.0), borderSide: BorderSide.none),
               filled: true,
-              fillColor: Colors.grey[200],
-              contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              suffixIcon: _searchController.text.isNotEmpty
+                  ? IconButton(
+                  icon: Icon(Icons.clear_rounded, color: Colors.grey[600], size: 20),
+                  onPressed: (){
+                    _searchController.clear();
+                    _onSearchChanged('');
+                  })
+                  : null,
             ),
             onChanged: _onSearchChanged,
+            textInputAction: TextInputAction.search,
+            onSubmitted: _onSearchChanged,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String>(
-                  decoration: InputDecoration(labelText: '카테고리', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)), contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0)),
-                  value: _selectedCategory,
-                  hint: const Text('전체'),
+                  decoration: dropdownDecoration('카테고리', Icons.filter_list_rounded),
+                  value: _selectedCategoryValue,
                   isExpanded: true,
+                  icon: Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey[700], size: 24),
+                  ),
                   items: [
-                    const DropdownMenuItem<String>(value: null, child: Text('전체')),
+                    const DropdownMenuItem<String>(value: null, child: Text('전체 카테고리', style: TextStyle(color: Colors.grey, fontSize: 14))),
                     ...StoreCategory.values.where((cat) => cat != StoreCategory.UNKNOWN).map((StoreCategory category) {
                       return DropdownMenuItem<String>(
                         value: storeCategoryToString(category),
-                        child: Text(category.name), // TODO: 한글화
+                        child: Text(_storeCategoryToKo(category), style: const TextStyle(fontSize: 14)),
                       );
                     }).toList(),
                   ],
                   onChanged: (String? newValue) {
-                    setState(() { _selectedCategory = newValue; });
-                    storeProvider.updateSearchCategory(newValue);
-                    storeProvider.fetchStores(
-                      name: _searchController.text.isNotEmpty ? _searchController.text : null,
-                      menuKeyword: storeProvider.currentSearchMenuKeyword,
-                      category: newValue,
-                      sortOption: _selectedSortOption,
-                    );
+                    setState(() { _selectedCategoryValue = newValue; });
+                    storeProvider.applyCategoryFilter(newValue);
+                  },
+                  selectedItemBuilder: (BuildContext context) {
+                    return [ // DropdownButtonFormField는 첫 번째 위젯만 사용
+                      Padding(
+                        padding: const EdgeInsets.only(left:0.0),
+                        child: Text(
+                          _getCategoryDisplayText(_selectedCategoryValue),
+                          style: TextStyle(fontSize: 14, color: _selectedCategoryValue == null ? Colors.grey[700] : Colors.black87, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    ];
                   },
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: DropdownButtonFormField<StoreSortOption>(
-                  decoration: InputDecoration(labelText: '정렬', border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)), contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0)),
+                  decoration: dropdownDecoration('정렬', Icons.sort_rounded),
                   value: _selectedSortOption,
                   isExpanded: true,
+                  icon: Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.grey[700], size: 24),
+                  ),
                   items: StoreSortOption.values.map((StoreSortOption option) {
-                    String optionText = '';
-                    switch (option) {
-                      case StoreSortOption.nameAsc: optionText = '이름↑'; break;
-                      case StoreSortOption.nameDesc: optionText = '이름↓'; break;
-                      case StoreSortOption.ratingAsc: optionText = '평점↑'; break;
-                      case StoreSortOption.ratingDesc: optionText = '평점↓'; break;
-                      case StoreSortOption.reviewCountAsc: optionText = '리뷰수↑'; break;
-                      case StoreSortOption.reviewCountDesc: optionText = '리뷰수↓'; break;
-                      case StoreSortOption.createdAtAsc: optionText = '오래된순'; break;
-                      case StoreSortOption.createdAtDesc: optionText = '최신순'; break;
-                    }
-                    return DropdownMenuItem<StoreSortOption>(value: option, child: Text(optionText));
+                    return DropdownMenuItem<StoreSortOption>(
+                        value: option,
+                        child: Text(_getSortOptionText(option), style: const TextStyle(fontSize: 14))
+                    );
                   }).toList(),
                   onChanged: (StoreSortOption? newValue) {
                     if (newValue != null) {
                       setState(() { _selectedSortOption = newValue; });
-                      storeProvider.updateSortOption(newValue);
-                      storeProvider.fetchStores(
-                        name: _searchController.text.isNotEmpty ? _searchController.text : null,
-                        menuKeyword: storeProvider.currentSearchMenuKeyword,
-                        category: _selectedCategory,
-                        sortOption: newValue,
-                      );
+                      storeProvider.applySortOption(newValue);
                     }
+                  },
+                  selectedItemBuilder: (BuildContext context) {
+                    return [
+                      Padding(
+                        padding: const EdgeInsets.only(left:0.0),
+                        child: Text(
+                          _getSortOptionText(_selectedSortOption),
+                          style: const TextStyle(fontSize: 14, color: Colors.black87, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    ];
                   },
                 ),
               ),
@@ -402,14 +467,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildStoreList(StoreProvider storeProvider) {
-    // ... (이전 코드와 동일) ...
     if (storeProvider.isLoading && storeProvider.stores.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     if (storeProvider.errorMessage != null && storeProvider.stores.isEmpty) {
       return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        const Icon(Icons.error_outline, color: Colors.red, size: 60),
-        Padding(padding: const EdgeInsets.all(16.0), child: Text('오류: ${storeProvider.errorMessage}', textAlign: TextAlign.center)),
+        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 60),
+        Padding(padding: const EdgeInsets.all(16.0), child: Text('가게 목록을 불러오는 중 오류가 발생했습니다.\n${storeProvider.errorMessage}', textAlign: TextAlign.center)),
         ElevatedButton(onPressed: _onRefresh, child: const Text('다시 시도'))
       ]));
     }
@@ -425,10 +489,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView.builder(
       controller: _scrollController,
-      itemCount: storeProvider.stores.length + (storeProvider.isLastPage ? 0 : 1),
+      padding: const EdgeInsets.only(top: 4, bottom: 8),
+      itemCount: storeProvider.stores.length + (storeProvider.isLastPage || storeProvider.stores.isEmpty ? 0 : 1),
       itemBuilder: (context, index) {
         if (index == storeProvider.stores.length) {
-          return storeProvider.isLoading
+          return storeProvider.isLoading && !storeProvider.isLastPage
               ? const Padding(padding: EdgeInsets.all(16.0), child: Center(child: CircularProgressIndicator()))
               : const SizedBox.shrink();
         }
@@ -445,7 +510,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMapView(StoreProvider storeProvider) {
     if (!_mapControllerCompleter.isCompleted) {
-      _mapControllerCompleter = Completer();
+      _mapControllerCompleter = Completer<NaverMapController>();
     }
 
     return NaverMap(
@@ -458,28 +523,22 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!_mapControllerCompleter.isCompleted) {
           _mapControllerCompleter.complete(controller);
         }
-        // 지도가 준비되면 Provider의 현재 가게 목록으로 마커 업데이트
         _updateMarkersOnMap(storeProvider.stores);
       },
       onMapTapped: (point, latLng) {
         debugPrint("지도 탭: ${latLng.latitude}, ${latLng.longitude}");
       },
-      // onCameraChange 시그니처 수정
-      onCameraChange: (NCameraUpdateReason reason, bool isAnimated) {
+      onCameraChange: (NCameraUpdateReason? reason, bool? isAnimated) {
         debugPrint("카메라 변경 이유: $reason, 애니메이션: $isAnimated");
-        // 현재 카메라 위치를 얻으려면 controller.getCameraPosition()을 사용해야 합니다.
-        // 이 콜백은 NCameraPosition을 직접 제공하지 않습니다.
-        // 필요하다면 onCameraIdle에서 최종 위치를 가져와 _currentCameraPosition을 업데이트합니다.
       },
       onCameraIdle: () async {
         if(_mapControllerCompleter.isCompleted) {
           final controller = await _mapControllerCompleter.future;
           final newPosition = await controller.getCameraPosition();
-          setState(() {
-            _currentCameraPosition = newPosition;
-          });
+          if (mounted) {
+            setState(() { _currentCameraPosition = newPosition; });
+          }
           debugPrint("카메라 이동 멈춤: ${newPosition.target}");
-          // TODO: 현재 보이는 지도 영역의 가게를 새로 로드하거나 필터링하는 로직 (선택적)
         }
       },
     );

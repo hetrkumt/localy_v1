@@ -8,6 +8,6 @@ import java.math.BigDecimal;
 @Setter
 public class CreateStoreAccountRequest {
     private Long storeId;
-    private String ownerUserId; // 가게 주인의 userId
+    private String ownerUserId;
     private BigDecimal initialBalance;
 }

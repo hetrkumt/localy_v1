@@ -6,7 +6,8 @@ import 'package:localy_front_flutter/presentation/providers/auth_provider.dart';
 import 'package:localy_front_flutter/presentation/providers/cart_provider.dart';
 import 'package:localy_front_flutter/presentation/providers/store_provider.dart';
 import 'package:localy_front_flutter/presentation/providers/order_provider.dart';
-import 'package:localy_front_flutter/presentation/providers/review_provider.dart'; // ReviewProvider 임포트
+import 'package:localy_front_flutter/presentation/providers/review_provider.dart';
+import 'package:localy_front_flutter/presentation/providers/payment_provider.dart';
 import 'package:localy_front_flutter/presentation/screens/auth/login_screen.dart';
 import 'package:localy_front_flutter/presentation/screens/home/home_screen.dart';
 import 'package:localy_front_flutter/data/services/auth_api_service.dart';
@@ -14,6 +15,7 @@ import 'package:provider/provider.dart';
 import 'package:localy_front_flutter/presentation/screens/cart/cart_screen.dart';
 import 'package:localy_front_flutter/presentation/screens/order/order_list_screen.dart';
 import 'package:localy_front_flutter/presentation/screens/store/store_detail_screen.dart';
+import 'package:localy_front_flutter/presentation/screens/my_page/my_page_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -51,6 +53,13 @@ void main() async {
         ChangeNotifierProxyProvider<AuthProvider, ReviewProvider>(
           create: (context) => ReviewProvider(authProvider), // AuthProvider를 ReviewProvider에 전달
           update: (context, auth, previousReviewProvider) => previousReviewProvider ?? ReviewProvider(auth),
+        ),
+        // PaymentProvider 등록
+        ChangeNotifierProxyProvider<AuthProvider, PaymentProvider>(
+          create: (context) => PaymentProvider(authProvider), // AuthProvider를 PaymentProvider에 전달
+          update: (context, auth, previous) {
+            return previous ?? PaymentProvider(auth);
+          },
         ),
       ],
       child: const MyApp(),
@@ -121,6 +130,7 @@ class MyApp extends StatelessWidget {
         HomeScreen.routeName: (context) => const HomeScreen(),
         CartScreen.routeName: (context) => const CartScreen(),
         OrderListScreen.routeName: (context) => const OrderListScreen(),
+        MyPageScreen.routeName: (context) => const MyPageScreen(),
       },
       onGenerateRoute: (settings) {
         if (settings.name == StoreDetailScreen.routeName) {
