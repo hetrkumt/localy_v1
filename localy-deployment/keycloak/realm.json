@@ -6,6 +6,8 @@
       "username": "consumer1",
       "enabled": true,
       "emailVerified": true,
+      "firstName": "consumer1",
+      "lastName": "consumer1",
       "credentials": [
         {
           "type": "password",
@@ -20,6 +22,8 @@
       "username": "market_owner1",
       "enabled": true,
       "emailVerified": true,
+      "firstName": "market_owner1",
+      "lastName": "market_owner1",
       "credentials": [
         {
           "type": "password",
@@ -34,6 +38,8 @@
       "username": "admin1",
       "enabled": true,
       "emailVerified": true,
+      "firstName": "admin",
+      "lastName": "admin",
       "credentials": [
         {
           "type": "password",
@@ -79,21 +85,21 @@
     {
       "clientId": "user-service",
       "enabled": true,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "user-secret",
-      "serviceAccountsEnabled": true, 
-      "publicClient": false,
-      "protocol": "openid-connect",
       "redirectUris": [
         "http://localhost:9001/*"
       ],
-      
-      "standardFlowEnabled": false,
-      "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": false,
-      "authorizationServicesEnabled": true 
+      "clientAuthenticatorType": "client-secret",
+      "secret": "user-secret",
+      "serviceAccountsEnabled": true,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "serviceAccountClientRoles": {
+        "realm-management": [
+          "query-users",
+          "manage-users",
+          "view-users"
+        ]
+      }
     }
-
   ]
-
 }
